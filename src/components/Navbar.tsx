@@ -19,12 +19,6 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
             <Link to="/" className="flex items-center gap-3 group">
-              <img 
-                src="/input_file_0.png" 
-                alt="EVS School Logo" 
-                className="w-10 h-10 object-contain rounded-full border border-stone-100 shadow-sm"
-                referrerPolicy="no-referrer"
-              />
               <div className="flex flex-col">
                 <span className="font-bold text-xl tracking-tight text-stone-900 leading-none">E.V.S. Public School</span>
               </div>
