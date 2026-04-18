@@ -47,13 +47,18 @@ import { formatDate } from '../lib/utils';
 interface Student {
   id: string;
   fullName: string;
-  parentName: string;
+  fatherName: string;
+  motherName: string;
+  aadharNumber: string;
+  dob: string;
   parentPhone: string;
   class: string;
   registeredBy: string;
   registeredByName: string;
+  registeredByDesignation: string;
   registrationDate: any;
   status: string;
+  confirmationSent?: boolean;
 }
 
 export default function Dashboard() {
@@ -71,6 +76,9 @@ export default function Dashboard() {
   const [classFilter, setClassFilter] = useState('All Classes');
   const [showAddForm, setShowAddForm] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [useWABusiness, setUseWABusiness] = useState(() => {
+    return localStorage.getItem('use_wa_business') === 'true';
+  });
   
   // Profile Completion State
   const [profileForm, setProfileForm] = useState({
@@ -80,7 +88,10 @@ export default function Dashboard() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [studentForm, setStudentForm] = useState({
     fullName: '',
-    parentName: '',
+    fatherName: '',
+    motherName: '',
+    aadharNumber: '',
+    dob: '',
     parentPhone: '',
     class: 'Nursery'
   });
@@ -210,12 +221,30 @@ export default function Dashboard() {
     };
   }, [user, role]);
 
-  const sendWhatsAppNotification = (studentName: string, parentPhone: string, studentClass: string) => {
+  const sendWhatsAppNotification = async (studentId?: string, studentName?: string, parentPhone?: string, studentClass?: string) => {
+    if (!studentId || !studentName || !parentPhone || !studentClass) return;
+
+    // Mark as confirmation sent in database
+    try {
+      await updateDoc(doc(db, 'students', studentId), {
+        confirmationSent: true
+      });
+    } catch (err) {
+      console.error("Failed to update confirmation status", err);
+    }
+
     const cleanPhone = parentPhone.replace(/\D/g, '');
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const message = `*E.V.S. PUBLIC SCHOOL Admission Confirmation*\n\nDear Parent,\n\nWe are happy to inform you that your child *${studentName}* has been successfully registered in *${studentClass}* at E.V.S. Public School.\n\nThank you for choosing us for your child's holistic development.\n\nFor any queries, contact our official number: 8954555074\n\n_Regards,_\n*Manager, EVS Public School*`;
     const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/${formattedPhone}?text=${encodedMessage}`, '_blank');
+    
+    // Force WhatsApp Business on Android if setting is enabled
+    if (useWABusiness) {
+      const intentUrl = `intent://send/${formattedPhone}/?text=${encodedMessage}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
+      window.location.href = intentUrl;
+    } else {
+      window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -223,30 +252,33 @@ export default function Dashboard() {
     if (!user) return;
     setLoading(true);
     try {
-      await addDoc(collection(db, 'students'), {
+      const docRef = await addDoc(collection(db, 'students'), {
         ...studentForm,
         registeredBy: user.uid,
-        registeredByName: user.displayName || user.email || user.phoneNumber,
+        registeredByName: userData?.fullName || user.displayName || user.email || user.phoneNumber || 'Staff Member',
+        registeredByDesignation: userData?.designation || '',
         registrationDate: Timestamp.now(),
-        status: 'confirmed'
+        status: 'confirmed',
+        confirmationSent: false
       });
       await addDoc(collection(db, 'notifications'), {
         type: 'registration',
-        message: `New student ${studentForm.fullName} registered by ${user.displayName || user.phoneNumber}`,
+        message: `New student ${studentForm.fullName} registered by ${userData?.fullName || user.displayName || user.phoneNumber}`,
         timestamp: Timestamp.now(),
         read: false
       });
       
+      const studentId = docRef.id;
       const registeredStudent = { ...studentForm };
       toast.success('Student registered successfully!', {
         action: {
           label: 'Send WhatsApp',
-          onClick: () => sendWhatsAppNotification(registeredStudent.fullName, registeredStudent.parentPhone, registeredStudent.class)
+          onClick: () => sendWhatsAppNotification(studentId, registeredStudent.fullName, registeredStudent.parentPhone, registeredStudent.class)
         },
         duration: 10000
       });
       
-      setStudentForm({ fullName: '', parentName: '', parentPhone: '', class: 'Nursery' });
+      setStudentForm({ fullName: '', fatherName: '', motherName: '', aadharNumber: '', dob: '', parentPhone: '', class: 'Nursery' });
     } catch (error: any) {
       toast.error('Registration failed: ' + error.message);
     } finally {
@@ -265,12 +297,13 @@ export default function Dashboard() {
         studentName: selectedStudent?.fullName || 'Unknown',
         amount: Number(feeForm.amount),
         collectedBy: user.uid,
-        collectedByName: user.displayName || user.phoneNumber,
+        collectedByName: userData?.fullName || user.displayName || user.phoneNumber || 'Staff Member',
+        collectedByDesignation: userData?.designation || '',
         timestamp: Timestamp.now()
       });
       await addDoc(collection(db, 'notifications'), {
         type: 'fee',
-        message: `Fee of ₹${feeForm.amount} collected for ${selectedStudent?.fullName} by ${user.displayName || user.phoneNumber}`,
+        message: `Fee of ₹${feeForm.amount} collected for ${selectedStudent?.fullName} by ${userData?.fullName || user.displayName || user.phoneNumber}`,
         timestamp: Timestamp.now(),
         read: false
       });
@@ -645,7 +678,10 @@ export default function Dashboard() {
               {activeTab === 'students' && (
                 <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input required type="text" value={studentForm.fullName} onChange={e => setStudentForm({...studentForm, fullName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Student Full Name" />
-                  <input required type="text" value={studentForm.parentName} onChange={e => setStudentForm({...studentForm, parentName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Parent Name" />
+                  <input required type="text" value={studentForm.fatherName} onChange={e => setStudentForm({...studentForm, fatherName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Father's Name" />
+                  <input type="text" value={studentForm.motherName} onChange={e => setStudentForm({...studentForm, motherName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Mother's Name" />
+                  <input required type="date" value={studentForm.dob} onChange={e => setStudentForm({...studentForm, dob: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Date of Birth" />
+                  <input required type="text" value={studentForm.aadharNumber} onChange={e => setStudentForm({...studentForm, aadharNumber: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Aadhar Number" />
                   <input required type="tel" value={studentForm.parentPhone} onChange={e => setStudentForm({...studentForm, parentPhone: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="WhatsApp Number" />
                   <select value={studentForm.class} onChange={e => setStudentForm({...studentForm, class: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
                     <option>Pre-Nursery</option>
@@ -715,8 +751,9 @@ export default function Dashboard() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-stone-50/50 text-stone-400 text-[10px] uppercase tracking-[0.2em] font-black">
-                        <th className="px-8 py-5">Student</th>
-                        <th className="px-8 py-5">Parent Contact</th>
+                        <th className="px-8 py-5">Student / Details</th>
+                        <th className="px-8 py-5">Family Details</th>
+                        <th className="px-8 py-5">Contact</th>
                         <th className="px-8 py-5">Class</th>
                         <th className="px-8 py-5">Joined</th>
                       </tr>
@@ -725,15 +762,31 @@ export default function Dashboard() {
                       {filteredData().map((student: any) => (
                         <tr key={student.id} className="hover:bg-stone-50/30 transition-colors group">
                           <td className="px-8 py-6">
-                            <div className="font-bold text-stone-900 group-hover:text-red-600 transition-colors">{student.fullName}</div>
-                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">STAFF: {student.registeredByName}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-bold text-stone-900 group-hover:text-red-600 transition-colors">{student.fullName}</div>
+                              {student.confirmationSent && (
+                                <div className="bg-green-100 text-green-700 p-0.5 rounded-full" title="WhatsApp Confirmation Sent">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">AADHAR: {student.aadharNumber || 'N/A'}</div>
+                            <div className="text-[10px] font-bold text-stone-400">DOB: {student.dob || 'N/A'}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="text-xs font-bold text-stone-700">F: {student.fatherName || student.parentName}</div>
+                            <div className="text-[10px] text-stone-400">M: {student.motherName || 'N/A'}</div>
                           </td>
                           <td className="px-8 py-6">
                             <div className="flex items-center justify-between gap-4">
                               <div className="text-sm font-semibold text-stone-700">{student.parentPhone}</div>
                               <button 
-                                onClick={() => sendWhatsAppNotification(student.fullName, student.parentPhone, student.class)}
-                                className="p-2.5 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm active:scale-90"
+                                onClick={() => sendWhatsAppNotification(student.id, student.fullName, student.parentPhone, student.class)}
+                                className={`p-2.5 rounded-xl transition-all shadow-sm active:scale-90 ${
+                                  student.confirmationSent 
+                                  ? 'bg-stone-100 text-stone-400 hover:bg-stone-200' 
+                                  : 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white'
+                                }`}
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
@@ -838,8 +891,15 @@ export default function Dashboard() {
                           </td>
                           <td className="px-8 py-6 font-black text-green-600 text-lg">₹{fee.amount}</td>
                           <td className="px-8 py-6">
-                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter">{fee.collectedByName}</div>
-                            <div className="text-[10px] font-bold text-stone-400">{formatDate(fee.timestamp?.toDate())}</div>
+                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter truncate max-w-[150px]">
+                              {fee.collectedByName}
+                            </div>
+                            {fee.collectedByDesignation && (
+                              <div className="text-[9px] font-bold text-red-500 uppercase -mt-0.5">
+                                {fee.collectedByDesignation}
+                              </div>
+                            )}
+                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">{formatDate(fee.timestamp?.toDate())}</div>
                           </td>
                         </tr>
                       ))}
@@ -927,6 +987,30 @@ export default function Dashboard() {
                         <Trash2 className="w-4 h-4" />
                         Reset Application Data
                       </button>
+
+                      <div className="mt-8 bg-stone-50 rounded-2xl p-6 border border-dashed border-stone-200">
+                        <h4 className="text-xs font-black text-stone-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <MessageSquare className="w-3 h-3 text-red-500" />
+                          WhatsApp Preferences
+                        </h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-stone-600">Force WhatsApp Business (Android)</span>
+                          <button 
+                            onClick={() => {
+                              const newValue = !useWABusiness;
+                              setUseWABusiness(newValue);
+                              localStorage.setItem('use_wa_business', String(newValue));
+                              toast.success(newValue ? 'Forcing WhatsApp Business' : 'Default WhatsApp used');
+                            }}
+                            className={`w-12 h-6 rounded-full transition-all relative ${useWABusiness ? 'bg-green-500' : 'bg-stone-300'}`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${useWABusiness ? 'left-7' : 'left-1'}`} />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-stone-400 mt-3 italic">
+                          Enable this if messages are opening in normal WhatsApp instead of Business account.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
