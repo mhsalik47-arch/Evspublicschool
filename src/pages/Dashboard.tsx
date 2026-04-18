@@ -798,7 +798,8 @@ export default function Dashboard() {
                             </span>
                           </td>
                           <td className="px-8 py-6 text-[10px] font-bold text-stone-500 uppercase">
-                            {formatDate(student.registrationDate?.toDate())}
+                            <div>{formatDate(student.registrationDate?.toDate())}</div>
+                            <div className="text-stone-300 mt-1">BY: {student.registeredByName}</div>
                           </td>
                         </tr>
                       ))}
@@ -822,7 +823,8 @@ export default function Dashboard() {
                         <tr key={inquiry.id} className="hover:bg-stone-50/30 transition-colors">
                           <td className="px-8 py-6">
                             <div className="font-bold text-stone-900">{inquiry.studentName}</div>
-                            <div className="text-[10px] text-stone-400 font-bold">PAR: {inquiry.fatherName} • {inquiry.mobile1}</div>
+                            <div className="text-[10px] text-stone-400 font-bold">F: {inquiry.fatherName} • {inquiry.mobile1}</div>
+                            <div className="text-[10px] text-stone-400">DOB: {inquiry.dob} • ADR: {inquiry.aadharNumber || 'N/A'}</div>
                           </td>
                           <td className="px-8 py-6">
                             <span className="text-xs font-bold text-stone-600 underline decoration-stone-200 underline-offset-4">{inquiry.applyingFor}</span>
