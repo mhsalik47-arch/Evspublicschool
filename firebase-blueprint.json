@@ -1,0 +1,141 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Staff or Admin user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "fullName": { "type": "string" },
+        "designation": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "staff"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student registration record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "class": { "type": "string" },
+        "registeredBy": { "type": "string" },
+        "registrationDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "confirmed"] }
+      },
+      "required": ["fullName", "parentPhone", "class", "registeredBy"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "Public admission inquiry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentName": { "type": "string" },
+        "dob": { "type": "string" },
+        "currentClass": { "type": "string" },
+        "applyingFor": { "type": "string" },
+        "fatherName": { "type": "string" },
+        "motherName": { "type": "string" },
+        "mobile1": { "type": "string" },
+        "mobile2": { "type": "string" },
+        "address": { "type": "string" },
+        "aadharNumber": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["new", "contacted", "enrolled"] },
+        "assignedStaffId": { "type": "string" },
+        "assignedStaffName": { "type": "string" }
+      },
+      "required": ["studentName", "mobile1", "applyingFor", "status"]
+    },
+    "FeePayment": {
+      "title": "Fee Payment",
+      "description": "Record of fee collection",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "amount": { "type": "number" },
+        "month": { "type": "string" },
+        "collectedBy": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "amount", "month", "collectedBy"]
+    },
+    "Activity": {
+      "title": "Class Activity",
+      "description": "Daily class activity or update",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "class": { "type": "string" },
+        "postedBy": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "class", "postedBy"]
+    },
+    "Notice": {
+      "title": "School Notice",
+      "description": "General announcement for parents",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "priority": { "type": "string", "enum": ["normal", "urgent"] }
+      },
+      "required": ["title", "content"]
+    },
+    "ContactMessage": {
+      "title": "Contact Message",
+      "description": "Communication from website visitors/parents",
+      "type": "object",
+      "properties": {
+        "parentName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["unread", "replied"] }
+      },
+      "required": ["parentName", "mobile", "message"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Student records"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "Inquiry",
+      "description": "Admission inquiries"
+    },
+    "/fees/{feeId}": {
+      "schema": "FeePayment",
+      "description": "Fee collection records"
+    },
+    "/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Class activity updates"
+    },
+    "/notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "School wide announcements"
+    },
+    "/messages/{messageId}": {
+      "schema": "ContactMessage",
+      "description": "Contact form submissions"
+    }
+  }
+}
