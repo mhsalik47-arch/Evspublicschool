@@ -29,22 +29,33 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribeUser = () => {};
+    let unsubscribeUser: (() => void) | undefined;
+    
+    // Auth Listener
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
+        // Cleanup old user listener if exists
+        if (unsubscribeUser) unsubscribeUser();
+        
         // Listen to user document changes
-        unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setUserData(data);
-            setRole(data.role);
-          } else {
-            // Setup default role if document doesn't exist
-            setupNewUser(user);
+        unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), 
+          (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              setUserData(data);
+              setRole(data.role);
+              setLoading(false);
+            } else {
+              // Setup default role if document doesn't exist
+              setupNewUser(user);
+            }
+          },
+          (error) => {
+            console.error("Firestore User Snapshot Error:", error);
+            setLoading(false);
           }
-          setLoading(false);
-        });
+        );
       } else {
         setUser(null);
         setUserData(null);
@@ -54,24 +65,28 @@ export default function App() {
     });
 
     const setupNewUser = async (user: User) => {
-      const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
-      const newRole = isDefaultAdmin ? 'admin' : 'staff';
-      const initialData = {
-        uid: user.uid,
-        email: user.email || '',
-        phoneNumber: user.phoneNumber || '',
-        displayName: user.displayName || user.phoneNumber || 'Staff Member',
-        role: newRole,
-        createdAt: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'users', user.uid), initialData);
-      setUserData(initialData);
-      setRole(newRole);
+      try {
+        const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
+        const newRole = isDefaultAdmin ? 'admin' : 'staff';
+        const initialData = {
+          uid: user.uid,
+          email: user.email || '',
+          phoneNumber: user.phoneNumber || '',
+          displayName: user.displayName || user.phoneNumber || 'Staff Member',
+          role: newRole,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'users', user.uid), initialData);
+        // The onSnapshot will pick this up and set loading to false
+      } catch (error) {
+        console.error("Setup New User Error:", error);
+        setLoading(false);
+      }
     };
 
     return () => {
       unsubscribeAuth();
-      unsubscribeUser();
+      if (unsubscribeUser) unsubscribeUser();
     };
   }, []);
 
