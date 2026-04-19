@@ -81,8 +81,10 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
-              <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route 
+                path="/dashboard" 
+                element={user ? <Dashboard /> : <Navigate to="/login" />} 
+              />
             </Routes>
           </main>
           <Toaster position="top-right" richColors />

@@ -71,6 +71,9 @@ export default function Dashboard() {
   const [classFilter, setClassFilter] = useState('All Classes');
   const [showAddForm, setShowAddForm] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [useWABusiness, setUseWABusiness] = useState(() => {
+    return localStorage.getItem('use_wa_business') === 'true';
+  });
   
   // Profile Completion State
   const [profileForm, setProfileForm] = useState({
@@ -215,7 +218,14 @@ export default function Dashboard() {
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const message = `*E.V.S. PUBLIC SCHOOL Admission Confirmation*\n\nDear Parent,\n\nWe are happy to inform you that your child *${studentName}* has been successfully registered in *${studentClass}* at E.V.S. Public School.\n\nThank you for choosing us for your child's holistic development.\n\nFor any queries, contact our official number: 8954555074\n\n_Regards,_\n*Manager, EVS Public School*`;
     const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/${formattedPhone}?text=${encodedMessage}`, '_blank');
+    
+    // Force WhatsApp Business on Android if setting is enabled
+    if (useWABusiness) {
+      const intentUrl = `intent://send/${formattedPhone}/?text=${encodedMessage}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
+      window.location.href = intentUrl;
+    } else {
+      window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -226,13 +236,14 @@ export default function Dashboard() {
       await addDoc(collection(db, 'students'), {
         ...studentForm,
         registeredBy: user.uid,
-        registeredByName: user.displayName || user.email || user.phoneNumber,
+        registeredByName: userData?.fullName || user.displayName || user.email || user.phoneNumber || 'Staff Member',
+        registeredByDesignation: userData?.designation || '',
         registrationDate: Timestamp.now(),
         status: 'confirmed'
       });
       await addDoc(collection(db, 'notifications'), {
         type: 'registration',
-        message: `New student ${studentForm.fullName} registered by ${user.displayName || user.phoneNumber}`,
+        message: `New student ${studentForm.fullName} registered by ${userData?.fullName || user.displayName || user.phoneNumber}`,
         timestamp: Timestamp.now(),
         read: false
       });
@@ -265,12 +276,13 @@ export default function Dashboard() {
         studentName: selectedStudent?.fullName || 'Unknown',
         amount: Number(feeForm.amount),
         collectedBy: user.uid,
-        collectedByName: user.displayName || user.phoneNumber,
+        collectedByName: userData?.fullName || user.displayName || user.phoneNumber || 'Staff Member',
+        collectedByDesignation: userData?.designation || '',
         timestamp: Timestamp.now()
       });
       await addDoc(collection(db, 'notifications'), {
         type: 'fee',
-        message: `Fee of ₹${feeForm.amount} collected for ${selectedStudent?.fullName} by ${user.displayName || user.phoneNumber}`,
+        message: `Fee of ₹${feeForm.amount} collected for ${selectedStudent?.fullName} by ${userData?.fullName || user.displayName || user.phoneNumber}`,
         timestamp: Timestamp.now(),
         read: false
       });
@@ -726,7 +738,9 @@ export default function Dashboard() {
                         <tr key={student.id} className="hover:bg-stone-50/30 transition-colors group">
                           <td className="px-8 py-6">
                             <div className="font-bold text-stone-900 group-hover:text-red-600 transition-colors">{student.fullName}</div>
-                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">STAFF: {student.registeredByName}</div>
+                            <div className="text-[10px] font-bold text-stone-400 mt-0.5 truncate max-w-[200px]">
+                              STAFF: {student.registeredByName} {student.registeredByDesignation ? `(${student.registeredByDesignation})` : ''}
+                            </div>
                           </td>
                           <td className="px-8 py-6">
                             <div className="flex items-center justify-between gap-4">
@@ -838,8 +852,15 @@ export default function Dashboard() {
                           </td>
                           <td className="px-8 py-6 font-black text-green-600 text-lg">₹{fee.amount}</td>
                           <td className="px-8 py-6">
-                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter">{fee.collectedByName}</div>
-                            <div className="text-[10px] font-bold text-stone-400">{formatDate(fee.timestamp?.toDate())}</div>
+                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter truncate max-w-[150px]">
+                              {fee.collectedByName}
+                            </div>
+                            {fee.collectedByDesignation && (
+                              <div className="text-[9px] font-bold text-red-500 uppercase -mt-0.5">
+                                {fee.collectedByDesignation}
+                              </div>
+                            )}
+                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">{formatDate(fee.timestamp?.toDate())}</div>
                           </td>
                         </tr>
                       ))}
@@ -927,6 +948,30 @@ export default function Dashboard() {
                         <Trash2 className="w-4 h-4" />
                         Reset Application Data
                       </button>
+
+                      <div className="mt-8 bg-stone-50 rounded-2xl p-6 border border-dashed border-stone-200">
+                        <h4 className="text-xs font-black text-stone-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <MessageSquare className="w-3 h-3 text-red-500" />
+                          WhatsApp Preferences
+                        </h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-stone-600">Force WhatsApp Business (Android)</span>
+                          <button 
+                            onClick={() => {
+                              const newValue = !useWABusiness;
+                              setUseWABusiness(newValue);
+                              localStorage.setItem('use_wa_business', String(newValue));
+                              toast.success(newValue ? 'Forcing WhatsApp Business' : 'Default WhatsApp used');
+                            }}
+                            className={`w-12 h-6 rounded-full transition-all relative ${useWABusiness ? 'bg-green-500' : 'bg-stone-300'}`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${useWABusiness ? 'left-7' : 'left-1'}`} />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-stone-400 mt-3 italic">
+                          Enable this if messages are opening in normal WhatsApp instead of Business account.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
