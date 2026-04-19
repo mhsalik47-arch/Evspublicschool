@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import { Toaster } from 'sonner';
 
@@ -29,65 +29,39 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribeUser: (() => void) | undefined;
-    
-    // Auth Listener
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
-        // Cleanup old user listener if exists
-        if (unsubscribeUser) unsubscribeUser();
-        
-        // Listen to user document changes
-        unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), 
-          (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              setUserData(data);
-              setRole(data.role);
-              setLoading(false);
-            } else {
-              // Setup default role if document doesn't exist
-              setupNewUser(user);
-            }
-          },
-          (error) => {
-            console.error("Firestore User Snapshot Error:", error);
-            setLoading(false);
-          }
-        );
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          setUserData(data);
+          setRole(data.role);
+        } else {
+          // Default role for new staff (first user is admin based on email in rules)
+          const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
+          const newRole = isDefaultAdmin ? 'admin' : 'staff';
+          const initialData = {
+            uid: user.uid,
+            email: user.email || '',
+            phoneNumber: user.phoneNumber || '',
+            displayName: user.displayName || user.phoneNumber || 'Staff Member',
+            role: newRole,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'users', user.uid), initialData);
+          setUserData(initialData);
+          setRole(newRole);
+        }
       } else {
         setUser(null);
         setUserData(null);
         setRole(null);
-        setLoading(false);
       }
+      setLoading(false);
     });
 
-    const setupNewUser = async (user: User) => {
-      try {
-        const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
-        const newRole = isDefaultAdmin ? 'admin' : 'staff';
-        const initialData = {
-          uid: user.uid,
-          email: user.email || '',
-          phoneNumber: user.phoneNumber || '',
-          displayName: user.displayName || user.phoneNumber || 'Staff Member',
-          role: newRole,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'users', user.uid), initialData);
-        // The onSnapshot will pick this up and set loading to false
-      } catch (error) {
-        console.error("Setup New User Error:", error);
-        setLoading(false);
-      }
-    };
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeUser) unsubscribeUser();
-    };
+    return () => unsubscribe();
   }, []);
 
   if (loading) {
@@ -107,12 +81,8 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
-              <Route path="/d" element={<Navigate to="/dashboard" replace />} />
-              <Route 
-                path="/dashboard" 
-                element={user ? <Dashboard /> : <Navigate to="/login" />} 
-              />
-              <Route path="*" element={<Navigate to="/" />} />
+              <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
           <Toaster position="top-right" richColors />
