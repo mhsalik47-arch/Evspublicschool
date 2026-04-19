@@ -226,14 +226,13 @@ export default function Dashboard() {
       await addDoc(collection(db, 'students'), {
         ...studentForm,
         registeredBy: user.uid,
-        registeredByName: userData?.fullName || user.displayName || user.email || user.phoneNumber || 'Staff Member',
-        registeredByDesignation: userData?.designation || '',
+        registeredByName: user.displayName || user.email || user.phoneNumber,
         registrationDate: Timestamp.now(),
         status: 'confirmed'
       });
       await addDoc(collection(db, 'notifications'), {
         type: 'registration',
-        message: `New student ${studentForm.fullName} registered by ${userData?.fullName || user.displayName || user.phoneNumber}`,
+        message: `New student ${studentForm.fullName} registered by ${user.displayName || user.phoneNumber}`,
         timestamp: Timestamp.now(),
         read: false
       });
@@ -266,13 +265,12 @@ export default function Dashboard() {
         studentName: selectedStudent?.fullName || 'Unknown',
         amount: Number(feeForm.amount),
         collectedBy: user.uid,
-        collectedByName: userData?.fullName || user.displayName || user.phoneNumber || 'Staff Member',
-        collectedByDesignation: userData?.designation || '',
+        collectedByName: user.displayName || user.phoneNumber,
         timestamp: Timestamp.now()
       });
       await addDoc(collection(db, 'notifications'), {
         type: 'fee',
-        message: `Fee of ₹${feeForm.amount} collected for ${selectedStudent?.fullName} by ${userData?.fullName || user.displayName || user.phoneNumber}`,
+        message: `Fee of ₹${feeForm.amount} collected for ${selectedStudent?.fullName} by ${user.displayName || user.phoneNumber}`,
         timestamp: Timestamp.now(),
         read: false
       });
@@ -728,9 +726,7 @@ export default function Dashboard() {
                         <tr key={student.id} className="hover:bg-stone-50/30 transition-colors group">
                           <td className="px-8 py-6">
                             <div className="font-bold text-stone-900 group-hover:text-red-600 transition-colors">{student.fullName}</div>
-                            <div className="text-[10px] font-bold text-stone-400 mt-0.5 truncate max-w-[200px]">
-                              STAFF: {student.registeredByName} {student.registeredByDesignation ? `(${student.registeredByDesignation})` : ''}
-                            </div>
+                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">STAFF: {student.registeredByName}</div>
                           </td>
                           <td className="px-8 py-6">
                             <div className="flex items-center justify-between gap-4">
@@ -842,15 +838,8 @@ export default function Dashboard() {
                           </td>
                           <td className="px-8 py-6 font-black text-green-600 text-lg">₹{fee.amount}</td>
                           <td className="px-8 py-6">
-                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter truncate max-w-[150px]">
-                              {fee.collectedByName}
-                            </div>
-                            {fee.collectedByDesignation && (
-                              <div className="text-[9px] font-bold text-red-500 uppercase -mt-0.5">
-                                {fee.collectedByDesignation}
-                              </div>
-                            )}
-                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">{formatDate(fee.timestamp?.toDate())}</div>
+                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter">{fee.collectedByName}</div>
+                            <div className="text-[10px] font-bold text-stone-400">{formatDate(fee.timestamp?.toDate())}</div>
                           </td>
                         </tr>
                       ))}

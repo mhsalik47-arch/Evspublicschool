@@ -141,7 +141,14 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
+            className="flex flex-col items-center"
           >
+            <img 
+              src="/input_file_0.png" 
+              alt="EVS School Logo" 
+              className="w-24 h-24 mb-6 shadow-2xl relative z-10 rounded-full bg-white p-1"
+              referrerPolicy="no-referrer"
+            />
             <span className="inline-block px-4 py-1.5 mb-6 text-xs font-bold tracking-widest text-white uppercase bg-red-600 rounded-full">
               Admission Open 2026-27
             </span>
