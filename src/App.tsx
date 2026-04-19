@@ -29,39 +29,50 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeUser = () => {};
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setUserData(data);
-          setRole(data.role);
-        } else {
-          // Default role for new staff (first user is admin based on email in rules)
-          const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
-          const newRole = isDefaultAdmin ? 'admin' : 'staff';
-          const initialData = {
-            uid: user.uid,
-            email: user.email || '',
-            phoneNumber: user.phoneNumber || '',
-            displayName: user.displayName || user.phoneNumber || 'Staff Member',
-            role: newRole,
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'users', user.uid), initialData);
-          setUserData(initialData);
-          setRole(newRole);
-        }
+        // Listen to user document changes
+        unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserData(data);
+            setRole(data.role);
+          } else {
+            // Setup default role if document doesn't exist
+            setupNewUser(user);
+          }
+          setLoading(false);
+        });
       } else {
         setUser(null);
         setUserData(null);
         setRole(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    const setupNewUser = async (user: User) => {
+      const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
+      const newRole = isDefaultAdmin ? 'admin' : 'staff';
+      const initialData = {
+        uid: user.uid,
+        email: user.email || '',
+        phoneNumber: user.phoneNumber || '',
+        displayName: user.displayName || user.phoneNumber || 'Staff Member',
+        role: newRole,
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'users', user.uid), initialData);
+      setUserData(initialData);
+      setRole(newRole);
+    };
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeUser();
+    };
   }, []);
 
   if (loading) {

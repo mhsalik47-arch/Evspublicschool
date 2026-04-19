@@ -52,6 +52,7 @@ interface Student {
   class: string;
   registeredBy: string;
   registeredByName: string;
+  registeredByDesignation?: string;
   registrationDate: any;
   status: string;
 }
@@ -72,14 +73,27 @@ export default function Dashboard() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [useWABusiness, setUseWABusiness] = useState(() => {
-    return localStorage.getItem('use_wa_business') === 'true';
+    try {
+      return localStorage.getItem('use_wa_business') === 'true';
+    } catch {
+      return false;
+    }
   });
   
   // Profile Completion State
   const [profileForm, setProfileForm] = useState({
-    fullName: '',
-    designation: ''
+    fullName: userData?.fullName || '',
+    designation: userData?.designation || ''
   });
+
+  useEffect(() => {
+    if (userData) {
+      setProfileForm({
+        fullName: userData.fullName || '',
+        designation: userData.designation || ''
+      });
+    }
+  }, [userData]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [studentForm, setStudentForm] = useState({
     fullName: '',
@@ -220,9 +234,14 @@ export default function Dashboard() {
     const encodedMessage = encodeURIComponent(message);
     
     // Force WhatsApp Business on Android if setting is enabled
-    if (useWABusiness) {
-      const intentUrl = `intent://send/${formattedPhone}/?text=${encodedMessage}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
-      window.location.href = intentUrl;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if (useWABusiness && isAndroid) {
+      try {
+        const intentUrl = `intent://send/${formattedPhone}/?text=${encodedMessage}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
+        window.location.href = intentUrl;
+      } catch (e) {
+        window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
+      }
     } else {
       window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
     }
@@ -314,11 +333,9 @@ export default function Dashboard() {
       await updateDoc(doc(db, 'users', user.uid), {
         fullName: profileForm.fullName,
         designation: profileForm.designation,
-        displayName: profileForm.fullName // Also update displayName for consistency
+        displayName: profileForm.fullName || user.displayName // Avoid empty displayName
       });
       toast.success('Profile updated successfully!');
-      // Force reload or state update would be better, but re-fetching user data takes care of it
-      window.location.reload(); 
     } catch (error: any) {
       toast.error('Failed to update profile');
     } finally {
