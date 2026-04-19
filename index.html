@@ -20,51 +20,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      (function() {
-        var log = document.createElement('div');
-        log.id = 'debug-log';
-        log.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:150px;overflow-y:auto;background:rgba(0,0,0,0.8);color:#fff;font-family:monospace;font-size:10px;z-index:9999;padding:10px;pointer-events:none;border-top:2px solid red;display:none;';
-        document.body.appendChild(log);
-
-        function showLog(msg, color) {
-          log.style.display = 'block';
-          log.style.pointerEvents = 'auto';
-          var entry = document.createElement('div');
-          entry.style.color = color || '#fff';
-          entry.style.borderBottom = '1px solid #333';
-          entry.style.padding = '2px 0';
-          entry.innerText = (typeof msg === 'object' ? JSON.stringify(msg) : msg);
-          log.appendChild(entry);
-          log.scrollTop = log.scrollHeight;
-        }
-
-        var oldLog = console.log;
-        var oldError = console.error;
-        var oldWarn = console.warn;
-
-        console.log = function() {
-          showLog('[LOG] ' + Array.from(arguments).join(' '), '#0f0');
-          oldLog.apply(console, arguments);
-        };
-        console.error = function() {
-          showLog('[ERROR] ' + Array.from(arguments).join(' '), '#f55');
-          oldError.apply(console, arguments);
-        };
-        console.warn = function() {
-          showLog('[WARN] ' + Array.from(arguments).join(' '), '#ff0');
-          oldWarn.apply(console, arguments);
-        };
-
-        window.onerror = function(msg, url, line) {
-          showLog('[SCRIPT ERROR] ' + msg + ' at ' + url + ':' + line, '#f00');
-        };
-        
-        window.onunhandledrejection = function(event) {
-          showLog('[PROMISE REJECTION] ' + event.reason, '#f00');
-        };
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
