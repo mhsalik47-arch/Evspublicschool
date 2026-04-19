@@ -110,6 +110,10 @@ export default function Login() {
       toast.success('Logged in with Google!');
       navigate('/dashboard');
     } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        // User closed the popup, don't show an error toast
+        return;
+      }
       console.error(error);
       toast.error('Google login failed');
     } finally {
