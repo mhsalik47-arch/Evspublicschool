@@ -10,6 +10,7 @@
     100% { transform: translateX(-50%); }
   }
   --animate-marquee: marquee 20s linear infinite;
+  --animate-marquee-fast: marquee 10s linear infinite;
 }
 
 @layer base {

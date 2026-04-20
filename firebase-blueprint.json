@@ -27,7 +27,11 @@
         "class": { "type": "string" },
         "registeredBy": { "type": "string" },
         "registrationDate": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["pending", "confirmed"] }
+        "status": { "type": "string", "enum": ["pending", "confirmed"] },
+        "confirmationSent": { "type": "boolean" },
+        "confirmationMethod": { "type": "string", "enum": ["whatsapp", "sms"] },
+        "confirmationSentAt": { "type": "string", "format": "date-time" },
+        "confirmationSentBy": { "type": "string" }
       },
       "required": ["fullName", "parentPhone", "class", "registeredBy"]
     },

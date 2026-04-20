@@ -73,7 +73,11 @@ service cloud.firestore {
     match /students/{studentId} {
       allow read: if isAdmin() || (isStaff() && resource.data.registeredBy == request.auth.uid);
       allow create: if isStaff() && isValidStudent(request.resource.data);
-      allow update: if isAdmin();
+      allow update: if isAdmin() || (
+        isStaff() && 
+        resource.data.registeredBy == request.auth.uid && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmationSent', 'confirmationMethod', 'confirmationSentAt', 'confirmationSentBy'])
+      );
       allow delete: if isAdmin();
     }
 

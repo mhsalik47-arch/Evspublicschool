@@ -37,12 +37,19 @@ import {
   ChevronDown,
   ChevronUp,
   Inbox,
+  User,
   LayoutDashboard,
   Settings as Cog,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  QrCode,
+  Download,
+  ExternalLink,
+  Pencil,
+  Smartphone
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
+import { QRCodeCanvas } from 'qrcode.react';
 
 interface Student {
   id: string;
@@ -76,6 +83,8 @@ export default function Dashboard() {
   const [classFilter, setClassFilter] = useState('All Classes');
   const [showAddForm, setShowAddForm] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isEditFeeModalOpen, setIsEditFeeModalOpen] = useState(false);
+  const [editingFee, setEditingFee] = useState<any>(null);
   const [useWABusiness, setUseWABusiness] = useState(() => {
     return localStorage.getItem('use_wa_business') === 'true';
   });
@@ -101,7 +110,9 @@ export default function Dashboard() {
     studentName: '',
     amount: '',
     month: 'April',
-    type: 'Monthly'
+    type: 'Monthly',
+    paymentMethod: 'Cash',
+    paidBy: ''
   });
 
   const [activityForm, setActivityForm] = useState({
@@ -227,7 +238,10 @@ export default function Dashboard() {
     // Mark as confirmation sent in database
     try {
       await updateDoc(doc(db, 'students', studentId), {
-        confirmationSent: true
+        confirmationSent: true,
+        confirmationMethod: 'whatsapp',
+        confirmationSentAt: Timestamp.now(),
+        confirmationSentBy: userData?.fullName || user?.displayName || user?.email || 'Staff'
       });
     } catch (err) {
       console.error("Failed to update confirmation status", err);
@@ -235,7 +249,17 @@ export default function Dashboard() {
 
     const cleanPhone = parentPhone.replace(/\D/g, '');
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const message = `*E.V.S. PUBLIC SCHOOL Admission Confirmation*\n\nDear Parent,\n\nWe are happy to inform you that your child *${studentName}* has been successfully registered in *${studentClass}* at E.V.S. Public School.\n\nThank you for choosing us for your child's holistic development.\n\nFor any queries, contact our official number: 8954555074\n\n_Regards,_\n*Manager, EVS Public School*`;
+    
+    const appUrl = window.location.origin;
+    
+    let message = '';
+    if (role === 'admin') {
+      message = `*E.V.S. PUBLIC SCHOOL Admission Confirmation*\n\nDear Parent,\n\nWe are happy to inform you that your child *${studentName}* has been successfully registered in *${studentClass}* at E.V.S. Public School.\n\n*View App:* ${appUrl}\n\nThank you for choosing us for your child's holistic development.\n\nFor any queries, contact our official number: 8954555074\n\n_Regards,_\n*M. D. Dr. Mh Salik*`;
+    } else {
+      const senderName = userData?.fullName || user?.displayName || 'Staff Member';
+      message = `*E.V.S. PUBLIC SCHOOL Admission Initiative*\n\nDear Parent,\n\nWe are happy to inform you that the registration process for your child *${studentName}* in *${studentClass}* has been initiated at E.V.S. Public School.\n\n*App Link:* ${appUrl}\n\nThank you for choosing us.\n\n_BY:_ *${senderName}*`;
+    }
+    
     const encodedMessage = encodeURIComponent(message);
     
     // Force WhatsApp Business on Android if setting is enabled
@@ -245,6 +269,38 @@ export default function Dashboard() {
     } else {
       window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
     }
+  };
+
+  const sendSMSNotification = async (studentId?: string, studentName?: string, parentPhone?: string, studentClass?: string) => {
+    if (!studentId || !studentName || !parentPhone || !studentClass) return;
+
+    // Mark as confirmation sent in database if not already
+    try {
+      await updateDoc(doc(db, 'students', studentId), {
+        confirmationSent: true,
+        confirmationMethod: 'sms',
+        confirmationSentAt: Timestamp.now(),
+        confirmationSentBy: userData?.fullName || user?.displayName || user?.email || 'Staff'
+      });
+    } catch (err) {
+      console.error("Failed to update confirmation status", err);
+    }
+
+    const cleanPhone = parentPhone.replace(/\D/g, '');
+    
+    const appUrl = window.location.origin;
+    
+    let message = '';
+    if (role === 'admin') {
+      message = `E.V.S. PUBLIC SCHOOL: Admission confirmed for ${studentName} in ${studentClass}. View details: ${appUrl} Regards, M. D. Dr. Mh Salik`;
+    } else {
+      const senderName = userData?.fullName || user?.displayName || 'Staff Member';
+      message = `E.V.S. PUBLIC SCHOOL: Registration for ${studentName} (${studentClass}) initiated. App: ${appUrl} BY: ${senderName}`;
+    }
+    
+    // SMS protocol with body
+    const smsUrl = `sms:${cleanPhone}${navigator.userAgent.match(/iPhone/i) ? '&' : '?'}body=${encodeURIComponent(message)}`;
+    window.location.href = smsUrl;
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -267,15 +323,31 @@ export default function Dashboard() {
         timestamp: Timestamp.now(),
         read: false
       });
+
+      // Post as a school activity to show on front page
+      await addDoc(collection(db, 'activities'), {
+        title: 'New Admission!',
+        description: `We are delighted to welcome ${studentForm.fullName} to ${studentForm.class}. Congratulations on the fresh beginning!`,
+        class: studentForm.class,
+        timestamp: Timestamp.now(),
+        postedBy: user.uid,
+        postedByName: userData?.fullName || user.displayName || 'Office'
+      });
       
       const studentId = docRef.id;
       const registeredStudent = { ...studentForm };
+      
       toast.success('Student registered successfully!', {
+        description: 'Send confirmation message to parent.',
         action: {
-          label: 'Send WhatsApp',
+          label: 'WhatsApp',
           onClick: () => sendWhatsAppNotification(studentId, registeredStudent.fullName, registeredStudent.parentPhone, registeredStudent.class)
         },
-        duration: 10000
+        cancel: {
+          label: 'SMS',
+          onClick: () => sendSMSNotification(studentId, registeredStudent.fullName, registeredStudent.parentPhone, registeredStudent.class)
+        },
+        duration: 20000
       });
       
       setStudentForm({ fullName: '', fatherName: '', motherName: '', aadharNumber: '', dob: '', parentPhone: '', class: 'Nursery' });
@@ -284,6 +356,45 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const sendFeeWhatsApp = (studentName: string, parentPhone: string, amount: number, month: string, type: string, paymentMethod: string) => {
+    const cleanPhone = parentPhone.replace(/\D/g, '');
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    
+    const senderName = userData?.fullName || user?.displayName || 'Office';
+    
+    let message = '';
+    const appUrl = window.location.origin;
+    
+    if (type === 'Admission') {
+      message = `*E.V.S. PUBLIC SCHOOL - Admission Fee Confirmation*\n\nDear Parent,\n\nCongratulations! We have received the *Admission Fee* of *₹${amount}* for *${studentName}*.\n\nYour child is now officially part of the E.V.S. Public School family.\n\n*Receipt Details:*\n- Amount: ₹${amount}\n- Method: ${paymentMethod}\n- Date: ${new Date().toLocaleDateString('en-IN')}\n\n*Open App:* ${appUrl}\n\n_Regards,_\n*E.V.S. Public School*\n_Processed By: ${senderName}_`;
+    } else {
+      message = `*E.V.S. PUBLIC SCHOOL - Fee Receipt*\n\nDear Parent,\n\nWe have received your payment of *₹${amount}* for *${studentName}* towards Monthly Fee for *${month}*.\n\n*Payment Details:*\n- Amount: ₹${amount}\n- Method: ${paymentMethod}\n- Date: ${new Date().toLocaleDateString('en-IN')}\n\n*View Progress:* ${appUrl}\n\n_Regards,_\n*E.V.S. Public School*\n_Processed By: ${senderName}_`;
+    }
+    
+    const encodedMessage = encodeURIComponent(message);
+    
+    if (useWABusiness) {
+      const intentUrl = `intent://send/${formattedPhone}/?text=${encodedMessage}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
+      window.location.href = intentUrl;
+    } else {
+      window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
+    }
+  };
+
+  const sendFeeSMS = (studentName: string, parentPhone: string, amount: number, month: string, type: string) => {
+    let message = '';
+    const appUrl = window.location.origin;
+    if (type === 'Admission') {
+      message = `E.V.S. PUBLIC SCHOOL: Admission Fee of Rs.${amount} received for ${studentName}. Welcome to our school family. Open App: ${appUrl} Thank you.`;
+    } else {
+      const detailText = `Monthly Fee (${month})`;
+      message = `E.V.S. PUBLIC SCHOOL: Fee of Rs.${amount} received for ${studentName} (${detailText}). View details: ${appUrl} Thank you.`;
+    }
+    
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`sms:${parentPhone}?body=${encodedMessage}`, '_blank');
   };
 
   const handleAddFee = async (e: React.FormEvent) => {
@@ -307,8 +418,24 @@ export default function Dashboard() {
         timestamp: Timestamp.now(),
         read: false
       });
-      toast.success('Fee recorded successfully!');
-      setFeeForm({ studentId: '', studentName: '', amount: '', month: 'April', type: 'Monthly' });
+
+      const currentFee = { ...feeForm };
+      const currentStudent = { ...selectedStudent };
+
+      toast.success('Fee recorded successfully!', {
+        description: 'Send receipt to parent.',
+        action: {
+          label: 'WhatsApp',
+          onClick: () => sendFeeWhatsApp(currentStudent.fullName!, currentStudent.parentPhone!, Number(currentFee.amount), currentFee.month, currentFee.type, currentFee.paymentMethod)
+        },
+        cancel: {
+          label: 'SMS',
+          onClick: () => sendFeeSMS(currentStudent.fullName!, currentStudent.parentPhone!, Number(currentFee.amount), currentFee.month, currentFee.type)
+        },
+        duration: 20000
+      });
+
+      setFeeForm({ studentId: '', studentName: '', amount: '', month: 'April', type: 'Monthly', paymentMethod: 'Cash', paidBy: '' });
     } catch (error: any) {
       toast.error('Failed to record fee');
     } finally {
@@ -324,6 +451,38 @@ export default function Dashboard() {
       toast.success(`Inquiry status updated to ${newStatus}`);
     } catch (error: any) {
       toast.error('Failed to update status');
+    }
+  };
+
+  const handleUpdateFee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFee) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'fees', editingFee.id), {
+        amount: Number(editingFee.amount),
+        month: editingFee.month,
+        type: editingFee.type,
+        paymentMethod: editingFee.paymentMethod,
+        paidBy: editingFee.paidBy
+      });
+      toast.success('Fee record updated successfully!');
+      setIsEditFeeModalOpen(false);
+      setEditingFee(null);
+    } catch (error: any) {
+      toast.error('Failed to update fee record');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteFee = async (feeId: string) => {
+    if (!window.confirm('Are you sure you want to delete this fee record?')) return;
+    try {
+      await deleteDoc(doc(db, 'fees', feeId));
+      toast.success('Fee record deleted');
+    } catch (error) {
+      toast.error('Failed to delete record');
     }
   };
 
@@ -357,13 +516,13 @@ export default function Dashboard() {
         toast.success('Assignment removed');
         return;
       }
-      const staff = staffMembers.find(s => s.uid === staffId);
+      const staff = staffMembers.find(s => s.id === staffId);
       await updateDoc(doc(db, 'inquiries', inquiryId), {
         assignedStaffId: staffId,
-        assignedStaffName: staff?.fullName || staff?.displayName || staff?.email,
+        assignedStaffName: staff?.fullName || staff?.displayName || staff?.email || 'Unknown Staff',
         assignedStaffDesignation: staff?.designation || ''
       });
-      toast.success(`Inquiry assigned to ${staff?.fullName || staff?.displayName || staff?.email}`);
+      toast.success(`Inquiry assigned to ${staff?.fullName || staff?.displayName || staff?.email || 'Staff'}`);
     } catch (error: any) {
       toast.error('Failed to assign inquiry');
     }
@@ -468,6 +627,56 @@ export default function Dashboard() {
   };
 
   const [notifications, setNotifications] = useState<any[]>([]);
+  const qrRef = React.useRef<HTMLCanvasElement>(null);
+
+  const downloadQR = () => {
+    const canvas = qrRef.current;
+    if (!canvas) return;
+    
+    // Create a temporary canvas for the poster
+    const posterCanvas = document.createElement('canvas');
+    const ctx = posterCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const padding = 60;
+    const qrSize = 400;
+    const headerHeight = 100;
+    const footerHeight = 80;
+    
+    posterCanvas.width = qrSize + (padding * 2);
+    posterCanvas.height = qrSize + headerHeight + footerHeight + (padding * 2);
+
+    // Background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, posterCanvas.width, posterCanvas.height);
+
+    // Header Text - E.V.S. PUBLIC SCHOOL
+    ctx.fillStyle = '#1c1917'; // stone-900
+    ctx.font = '900 36px Urbanist, Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('E.V.S. PUBLIC SCHOOL', posterCanvas.width / 2, padding + 40);
+
+    // Subtitle
+    ctx.font = '800 18px Urbanist, Inter, sans-serif';
+    ctx.fillStyle = '#ef4444'; // red-500
+    ctx.fillText('OFFICIAL ADMISSION PORTAL', posterCanvas.width / 2, padding + 75);
+
+    // Draw QR Code
+    ctx.drawImage(canvas, padding, padding + headerHeight, qrSize, qrSize);
+
+    // Footer Text
+    ctx.fillStyle = '#78716c'; // stone-500
+    ctx.font = 'bold 16px Urbanist, Inter, sans-serif';
+    ctx.fillText('SCAN TO APPLY ONLINE', posterCanvas.width / 2, posterCanvas.height - padding - 20);
+
+    const url = posterCanvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "evs-school-qr-poster.png";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   useEffect(() => {
     if (role !== 'admin') return;
@@ -496,7 +705,7 @@ export default function Dashboard() {
                 <input
                   required
                   type="text"
-                  value={profileForm.fullName}
+                  value={profileForm.fullName ?? ''}
                   onChange={e => setProfileForm({...profileForm, fullName: e.target.value})}
                   className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-6 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 transition-all font-bold"
                   placeholder="e.g. Mohd Salik"
@@ -507,7 +716,7 @@ export default function Dashboard() {
                 <input
                   required
                   type="text"
-                  value={profileForm.designation}
+                  value={profileForm.designation ?? ''}
                   onChange={e => setProfileForm({...profileForm, designation: e.target.value})}
                   className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-6 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 transition-all font-bold"
                   placeholder="e.g. Mathematics Teacher"
@@ -677,13 +886,13 @@ export default function Dashboard() {
 
               {activeTab === 'students' && (
                 <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <input required type="text" value={studentForm.fullName} onChange={e => setStudentForm({...studentForm, fullName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Student Full Name" />
-                  <input required type="text" value={studentForm.fatherName} onChange={e => setStudentForm({...studentForm, fatherName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Father's Name" />
-                  <input type="text" value={studentForm.motherName} onChange={e => setStudentForm({...studentForm, motherName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Mother's Name" />
-                  <input required type="date" value={studentForm.dob} onChange={e => setStudentForm({...studentForm, dob: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Date of Birth" />
-                  <input required type="text" value={studentForm.aadharNumber} onChange={e => setStudentForm({...studentForm, aadharNumber: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Aadhar Number" />
-                  <input required type="tel" value={studentForm.parentPhone} onChange={e => setStudentForm({...studentForm, parentPhone: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="WhatsApp Number" />
-                  <select value={studentForm.class} onChange={e => setStudentForm({...studentForm, class: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
+                  <input required type="text" value={studentForm.fullName ?? ''} onChange={e => setStudentForm({...studentForm, fullName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Student Full Name" />
+                  <input required type="text" value={studentForm.fatherName ?? ''} onChange={e => setStudentForm({...studentForm, fatherName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Father's Name" />
+                  <input type="text" value={studentForm.motherName ?? ''} onChange={e => setStudentForm({...studentForm, motherName: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Mother's Name" />
+                  <input required type="date" value={studentForm.dob ?? ''} onChange={e => setStudentForm({...studentForm, dob: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Date of Birth" />
+                  <input required type="text" value={studentForm.aadharNumber ?? ''} onChange={e => setStudentForm({...studentForm, aadharNumber: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Aadhar Number" />
+                  <input required type="tel" value={studentForm.parentPhone ?? ''} onChange={e => setStudentForm({...studentForm, parentPhone: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="WhatsApp Number" />
+                  <select value={studentForm.class ?? ''} onChange={e => setStudentForm({...studentForm, class: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
                     <option>Pre-Nursery</option>
                     <option>Nursery</option>
                     <option>Junior KG</option>
@@ -698,20 +907,25 @@ export default function Dashboard() {
 
               {activeTab === 'fees' && (
                 <form onSubmit={handleAddFee} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <select required value={feeForm.studentId} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 md:col-span-2">
+                  <select required value={feeForm.studentId ?? ''} onChange={e => setFeeForm({...feeForm, studentId: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 md:col-span-2">
                     <option value="">Select Student</option>
                     {students.map(s => <option key={s.id} value={s.id}>{s.fullName} ({s.class})</option>)}
                   </select>
-                  <select value={feeForm.type} onChange={e => setFeeForm({...feeForm, type: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
+                  <select value={feeForm.type ?? ''} onChange={e => setFeeForm({...feeForm, type: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
                     <option value="Monthly">Monthly Fee</option>
                     <option value="Admission">Admission Fee</option>
                   </select>
-                  <input required type="number" value={feeForm.amount} onChange={e => setFeeForm({...feeForm, amount: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Amount (₹)" />
+                  <input required type="number" value={feeForm.amount ?? ''} onChange={e => setFeeForm({...feeForm, amount: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Amount (₹)" />
                   {feeForm.type === 'Monthly' && (
-                    <select value={feeForm.month} onChange={e => setFeeForm({...feeForm, month: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 md:col-span-2">
-                      {['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'].map(m => <option key={m}>{m}</option>)}
+                    <select value={feeForm.month ?? ''} onChange={e => setFeeForm({...feeForm, month: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 md:col-span-2">
+                      {['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'].map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                   )}
+                  <select value={feeForm.paymentMethod ?? ''} onChange={e => setFeeForm({...feeForm, paymentMethod: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
+                    <option value="Cash">Cash Payment</option>
+                    <option value="Online">Online Transfer</option>
+                  </select>
+                  <input required type="text" value={feeForm.paidBy ?? ''} onChange={e => setFeeForm({...feeForm, paidBy: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Payer Name (e.g. Father)" />
                   <button disabled={loading} type="submit" className="md:col-span-2 bg-red-600 text-white font-black py-4 rounded-2xl hover:bg-red-700 transition-all shadow-xl shadow-red-600/20 active:scale-[0.98]">
                     Record Payment
                   </button>
@@ -720,16 +934,16 @@ export default function Dashboard() {
 
               {(activeTab === 'activities' || activeTab === 'notices') && (
                 <form onSubmit={activeTab === 'notices' ? handleAddNotice : handleAddActivity} className="space-y-4">
-                  <input required type="text" value={activeTab === 'notices' ? noticeForm.title : activityForm.title} onChange={e => activeTab === 'notices' ? setNoticeForm({...noticeForm, title: e.target.value}) : setActivityForm({...activityForm, title: e.target.value})} className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Title" />
-                  <textarea required value={activeTab === 'notices' ? noticeForm.content : activityForm.description} onChange={e => activeTab === 'notices' ? setNoticeForm({...noticeForm, content: e.target.value}) : setActivityForm({...activityForm, description: e.target.value})} className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 h-32" placeholder="Description / Content" />
+                  <input required type="text" value={(activeTab === 'notices' ? noticeForm.title : activityForm.title) ?? ''} onChange={e => activeTab === 'notices' ? setNoticeForm({...noticeForm, title: e.target.value}) : setActivityForm({...activityForm, title: e.target.value})} className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900" placeholder="Title" />
+                  <textarea required value={(activeTab === 'notices' ? noticeForm.content : activityForm.description) ?? ''} onChange={e => activeTab === 'notices' ? setNoticeForm({...noticeForm, content: e.target.value}) : setActivityForm({...activityForm, description: e.target.value})} className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900 h-32" placeholder="Description / Content" />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {activeTab === 'notices' ? (
-                      <select value={noticeForm.priority} onChange={e => setNoticeForm({...noticeForm, priority: e.target.value as any})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
+                      <select value={noticeForm.priority ?? ''} onChange={e => setNoticeForm({...noticeForm, priority: e.target.value as any})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
                         <option value="normal">Normal Priority</option>
                         <option value="urgent">Urgent Priority</option>
                       </select>
                     ) : (
-                      <select value={activityForm.class} onChange={e => setActivityForm({...activityForm, class: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
+                      <select value={activityForm.class ?? ''} onChange={e => setActivityForm({...activityForm, class: e.target.value})} className="bg-stone-50 border border-stone-100 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-stone-900">
                         <option>All Classes</option>
                         {['Pre-Nursery', 'Nursery', 'Junior KG', 'Senior KG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8'].map(c => <option key={c}>{c}</option>)}
                       </select>
@@ -765,21 +979,33 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2">
                               <div className="font-bold text-stone-900 group-hover:text-red-600 transition-colors">{student.fullName}</div>
                               {student.confirmationSent && (
-                                <div className="bg-green-100 text-green-700 p-0.5 rounded-full" title="WhatsApp Confirmation Sent">
-                                  <CheckCircle2 className="w-3 h-3" />
+                                <div className="flex items-center gap-1">
+                                  <div className={`${student.confirmationMethod === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-stone-900 text-white'} p-0.5 rounded-full`} title={`Confirmed via ${student.confirmationMethod?.toUpperCase()} by ${student.confirmationSentBy}`}>
+                                    <CheckCircle2 className="w-3 h-3" />
+                                  </div>
+                                  {role === 'admin' && (
+                                    <span className="text-[8px] font-black uppercase text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-md">
+                                      {student.confirmationMethod === 'whatsapp' ? 'WA' : 'SMS'} • {student.confirmationSentBy?.split(' ')[0]}
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>
                             <div className="text-[10px] font-bold text-stone-400 mt-0.5">AADHAR: {student.aadharNumber || 'N/A'}</div>
                             <div className="text-[10px] font-bold text-stone-400">DOB: {student.dob || 'N/A'}</div>
+                            {role === 'admin' && student.confirmationSent && (
+                              <div className="text-[8px] font-bold text-stone-300 mt-1 uppercase">
+                                Sent: {formatDate(student.confirmationSentAt?.toDate())}
+                              </div>
+                            )}
                           </td>
                           <td className="px-8 py-6">
                             <div className="text-xs font-bold text-stone-700">F: {student.fatherName || student.parentName}</div>
                             <div className="text-[10px] text-stone-400">M: {student.motherName || 'N/A'}</div>
                           </td>
                           <td className="px-8 py-6">
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="text-sm font-semibold text-stone-700">{student.parentPhone}</div>
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="text-sm font-semibold text-stone-700 mr-2">{student.parentPhone}</div>
                               <button 
                                 onClick={() => sendWhatsAppNotification(student.id, student.fullName, student.parentPhone, student.class)}
                                 className={`p-2.5 rounded-xl transition-all shadow-sm active:scale-90 ${
@@ -787,8 +1013,20 @@ export default function Dashboard() {
                                   ? 'bg-stone-100 text-stone-400 hover:bg-stone-200' 
                                   : 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white'
                                 }`}
+                                title="Send WhatsApp"
                               >
                                 <MessageCircle className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => sendSMSNotification(student.id, student.fullName, student.parentPhone, student.class)}
+                                className={`p-2.5 rounded-xl transition-all shadow-sm active:scale-90 ${
+                                  student.confirmationSent 
+                                  ? 'bg-stone-100 text-stone-400 hover:bg-stone-200' 
+                                  : 'bg-stone-900 text-white hover:bg-black'
+                                }`}
+                                title="Send SMS Fallback"
+                              >
+                                <Phone className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -814,7 +1052,7 @@ export default function Dashboard() {
                         <th className="px-8 py-5">Child Details</th>
                         <th className="px-8 py-5">Admission For</th>
                         <th className="px-8 py-5">Status</th>
-                        {role === 'admin' && <th className="px-8 py-5">Assign Staff</th>}
+                        <th className="px-8 py-5">Assigned To</th>
                         <th className="px-8 py-5">Fee</th>
                       </tr>
                     </thead>
@@ -844,22 +1082,42 @@ export default function Dashboard() {
                               <option value="enrolled">Enrolled</option>
                             </select>
                           </td>
-                          {role === 'admin' && (
-                            <td className="px-8 py-6">
-                              <select
-                                value={inquiry.assignedStaffId || ''}
-                                onChange={(e) => handleAssignInquiry(inquiry.id, e.target.value)}
-                                className="bg-stone-50 border border-stone-100 rounded-xl px-3 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-stone-900 w-full"
-                              >
-                                <option value="">Unassigned</option>
-                                {staffMembers.map(staff => (
-                                  <option key={staff.uid} value={staff.uid}>
-                                    {staff.fullName || staff.displayName || staff.email} {staff.designation ? `(${staff.designation})` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                          )}
+                          <td className="px-8 py-6">
+                            {role === 'admin' ? (
+                              <div className="relative group">
+                                <select
+                                  value={inquiry.assignedStaffId || ''}
+                                  onChange={(e) => handleAssignInquiry(inquiry.id, e.target.value)}
+                                  className={`w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:ring-2 focus:ring-stone-900 transition-all appearance-none cursor-pointer ${
+                                    inquiry.assignedStaffId ? 'text-stone-900' : 'text-stone-400'
+                                  }`}
+                                >
+                                  <option value="">Unassigned</option>
+                                  {staffMembers.map(staff => (
+                                    <option key={staff.id} value={staff.id}>
+                                      {staff.fullName || staff.displayName || staff.email} {staff.designation ? `(${staff.designation})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                                  <ChevronDown className="w-3 h-3" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                {inquiry.assignedStaffId ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 bg-stone-100 rounded-full flex items-center justify-center">
+                                      <User className="w-3 h-3 text-stone-400" />
+                                    </div>
+                                    <span className="text-[10px] font-bold text-stone-600">{inquiry.assignedStaffName || 'Staff'}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-stone-300 italic uppercase tracking-wider">Unassigned</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-8 py-6 font-black text-red-600">₹{inquiry.amountPaid}</td>
                         </tr>
                       ))}
@@ -873,38 +1131,101 @@ export default function Dashboard() {
                       <tr className="bg-stone-50/50 text-stone-400 text-[10px] uppercase tracking-[0.2em] font-black">
                         <th className="px-8 py-5">Student</th>
                         <th className="px-8 py-5">Fee Type / Month</th>
-                        <th className="px-8 py-5">Amount</th>
-                        <th className="px-8 py-5">Record</th>
+                        <th className="px-8 py-5">Amount / Method</th>
+                        <th className="px-8 py-5">Record / Collector</th>
+                        <th className="px-8 py-5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-50">
-                      {filteredData().map((fee: any) => (
-                        <tr key={fee.id} className="hover:bg-stone-50/30 transition-colors">
-                          <td className="px-8 py-6 font-bold text-stone-900">{fee.studentName}</td>
-                          <td className="px-8 py-6">
-                            <div className="flex flex-col gap-1">
-                              <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full w-fit ${fee.type === 'Admission' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                                {fee.type || 'Monthly'}
-                              </span>
-                              {fee.type !== 'Admission' && (
-                                <span className="text-xs font-bold text-stone-600 bg-stone-100 px-2 py-1 rounded-md w-fit">{fee.month}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-8 py-6 font-black text-green-600 text-lg">₹{fee.amount}</td>
-                          <td className="px-8 py-6">
-                            <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter truncate max-w-[150px]">
-                              {fee.collectedByName}
-                            </div>
-                            {fee.collectedByDesignation && (
-                              <div className="text-[9px] font-bold text-red-500 uppercase -mt-0.5">
-                                {fee.collectedByDesignation}
+                      {filteredData().map((fee: any) => {
+                        const student = students.find(s => s.id === fee.studentId);
+                        return (
+                          <tr key={fee.id} className="hover:bg-stone-50/30 transition-colors group">
+                            <td className="px-8 py-6 font-bold text-stone-900">{fee.studentName}</td>
+                            <td className="px-8 py-6">
+                              <div className="flex flex-col gap-1">
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full w-fit ${fee.type === 'Admission' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                  {fee.type || 'Monthly'}
+                                </span>
+                                {fee.type !== 'Admission' && (
+                                  <span className="text-xs font-bold text-stone-600 bg-stone-100 px-2 py-1 rounded-md w-fit">{fee.month}</span>
+                                )}
                               </div>
-                            )}
-                            <div className="text-[10px] font-bold text-stone-400 mt-0.5">{formatDate(fee.timestamp?.toDate())}</div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-8 py-6">
+                              <div className="font-black text-green-600 text-lg">₹{fee.amount}</div>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${fee.paymentMethod === 'Online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                                  {fee.paymentMethod || 'Cash'}
+                                </span>
+                                {fee.paidBy && <span className="text-[9px] font-bold text-stone-400 truncate max-w-[80px]">By: {fee.paidBy}</span>}
+                              </div>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div className="text-[10px] font-black text-stone-900 uppercase tracking-tighter truncate max-w-[150px]">
+                                {fee.collectedByName}
+                              </div>
+                              {fee.collectedByDesignation && (
+                                <div className="text-[9px] font-bold text-red-500 uppercase -mt-0.5">
+                                  {fee.collectedByDesignation}
+                                </div>
+                              )}
+                              <div className="text-[10px] font-bold text-stone-400 mt-0.5">{formatDate(fee.timestamp?.toDate())}</div>
+                            </td>
+                            <td className="px-8 py-6 text-right">
+                              <div className="flex items-center justify-end gap-2 transition-all">
+                                <button
+                                  onClick={() => {
+                                    if (student) {
+                                      sendFeeWhatsApp(student.fullName, student.parentPhone, fee.amount, fee.month, fee.type, fee.paymentMethod);
+                                    } else {
+                                      toast.error('Student data not found');
+                                    }
+                                  }}
+                                  title="Send WhatsApp"
+                                  className="w-8 h-8 rounded-lg bg-green-50 text-green-600 flex items-center justify-center hover:bg-green-100 transition-colors"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (student) {
+                                      sendFeeSMS(student.fullName, student.parentPhone, fee.amount, fee.month, fee.type);
+                                    } else {
+                                      toast.error('Student data not found');
+                                    }
+                                  }}
+                                  title="Send SMS"
+                                  className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors"
+                                >
+                                  <Smartphone className="w-4 h-4" />
+                                </button>
+                                {(role === 'admin' || fee.collectedBy === user.uid) && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingFee(fee);
+                                      setIsEditFeeModalOpen(true);
+                                    }}
+                                    title="Edit Record"
+                                    className="w-8 h-8 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center hover:bg-stone-200 transition-colors"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {role === 'admin' && (
+                                  <button
+                                    onClick={() => handleDeleteFee(fee.id)}
+                                    title="Delete Record"
+                                    className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -992,6 +1313,70 @@ export default function Dashboard() {
 
                       <div className="mt-8 bg-stone-50 rounded-2xl p-6 border border-dashed border-stone-200">
                         <h4 className="text-xs font-black text-stone-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <QrCode className="w-3 h-3 text-red-500" />
+                          App QR Code & Sharing
+                        </h4>
+                        <div className="flex flex-col items-center gap-6 py-4">
+                          <div className="bg-white p-8 rounded-[48px] shadow-2xl border-4 border-stone-900 shadow-stone-900/10 flex flex-col items-center gap-6">
+                            <div className="text-center">
+                              <h3 className="text-xl font-black text-stone-900 tracking-tighter">E.V.S. PUBLIC SCHOOL</h3>
+                              <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mt-1">Admission Portal</p>
+                            </div>
+                            
+                            <div className="bg-stone-50 p-4 rounded-[32px]">
+                              <QRCodeCanvas 
+                                ref={qrRef}
+                                value={window.location.origin} 
+                                size={200}
+                                level="H"
+                                includeMargin={false}
+                              />
+                            </div>
+
+                            <div className="text-center">
+                              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Scan to verify & apply</p>
+                            </div>
+                          </div>
+                          
+                          <div className="text-center space-y-2 mt-4">
+                            <p className="text-xs font-black text-stone-900 opacity-60">
+                              {window.location.host}
+                            </p>
+                          </div>
+
+                          <div className="flex w-full gap-2 mt-2 flex-wrap sm:flex-nowrap">
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(window.location.origin);
+                                toast.success('Link copied to clipboard!');
+                              }}
+                              className="flex-1 bg-white border border-stone-200 text-stone-900 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-stone-50 transition-all flex items-center justify-center gap-2"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Copy Link
+                            </button>
+                            <button 
+                              onClick={downloadQR}
+                              className="flex-1 bg-white border border-stone-200 text-stone-900 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-stone-50 transition-all flex items-center justify-center gap-2"
+                            >
+                              <Download className="w-3 h-3 text-red-500" />
+                              Download QR
+                            </button>
+                            <a 
+                              href={window.location.origin}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex-1 bg-stone-900 text-white text-[10px] font-black py-3 px-4 rounded-xl hover:bg-stone-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-stone-900/10"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Open Link
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-8 bg-stone-50 rounded-2xl p-6 border border-dashed border-stone-200">
+                        <h4 className="text-xs font-black text-stone-900 uppercase tracking-widest mb-4 flex items-center gap-2">
                           <MessageSquare className="w-3 h-3 text-red-500" />
                           WhatsApp Preferences
                         </h4>
@@ -1050,6 +1435,105 @@ export default function Dashboard() {
                           Cancel
                         </button>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit Fee Modal Overlay */}
+                {isEditFeeModalOpen && editingFee && (
+                  <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-stone-900/90 backdrop-blur-md" onClick={() => setIsEditFeeModalOpen(false)} />
+                    <div className="relative bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 overflow-y-auto max-h-[90vh]">
+                      <div className="flex items-center gap-3 mb-8">
+                        <div className="w-12 h-12 bg-stone-900 rounded-2xl flex items-center justify-center">
+                          <Pencil className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-black text-stone-900 tracking-tighter">Edit Fee Record</h3>
+                          <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mt-0.5">Updating payment for {editingFee.studentName}</p>
+                        </div>
+                      </div>
+                      
+                      <form onSubmit={handleUpdateFee} className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Payment Type</label>
+                            <select 
+                              value={editingFee.type ?? ''} 
+                              onChange={e => setEditingFee({...editingFee, type: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            >
+                              <option value="Monthly">Monthly Fee</option>
+                              <option value="Admission">Admission Fee</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Amount (₹)</label>
+                            <input 
+                              required 
+                              type="number" 
+                              value={editingFee.amount ?? ''} 
+                              onChange={e => setEditingFee({...editingFee, amount: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                        </div>
+
+                        {editingFee.type === 'Monthly' && (
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Fee Month</label>
+                            <select 
+                              value={editingFee.month ?? ''} 
+                              onChange={e => setEditingFee({...editingFee, month: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            >
+                              {['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'].map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Method</label>
+                            <select 
+                              value={editingFee.paymentMethod ?? ''} 
+                              onChange={e => setEditingFee({...editingFee, paymentMethod: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            >
+                              <option value="Cash">Cash</option>
+                              <option value="Online">Online</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Paid By</label>
+                            <input 
+                              required 
+                              type="text" 
+                              value={editingFee.paidBy ?? ''} 
+                              onChange={e => setEditingFee({...editingFee, paidBy: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                              placeholder="Name of payer"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-4 flex flex-col gap-3">
+                          <button
+                            disabled={loading}
+                            type="submit"
+                            className="w-full bg-stone-900 text-white font-black py-4 rounded-2xl hover:bg-stone-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-stone-900/10"
+                          >
+                            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Update Record'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditFeeModalOpen(false)}
+                            className="w-full bg-stone-50 text-stone-500 font-bold py-4 rounded-2xl hover:bg-stone-100 transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   </div>
                 )}

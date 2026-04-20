@@ -17,7 +17,9 @@ import {
   ExternalLink,
   X,
   Bell,
-  MessageSquare
+  MessageSquare,
+  Share2,
+  Copy
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, addDoc, Timestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
@@ -47,6 +49,7 @@ const feeStructure = [
 
 export default function Home() {
   const [inquiryLoading, setInquiryLoading] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showInquiryModal, setShowInquiryModal] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [notices, setNotices] = useState<any[]>([]);
@@ -122,8 +125,111 @@ export default function Home() {
       setInquiryLoading(false);
     }
   };
+
+  const handleShare = async () => {
+    const shareData = {
+      title: 'E.V.S. PUBLIC SCHOOL',
+      text: 'Check out E.V.S. Public School - A Centre of Holistic Development with Education & Values. Admission Open 2026-27!',
+      url: window.location.origin,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        toast.success('Shared successfully!');
+      } catch (err) {
+        console.log('Share failed or cancelled');
+      }
+    } else {
+      setShowShareModal(true);
+    }
+  };
   return (
     <div className="flex flex-col">
+      {/* Scrollable Admission Alert */}
+      {activities.filter(a => a.title === 'New Admission!').length > 0 && (
+        <div className="bg-red-600 text-white py-2 overflow-hidden whitespace-nowrap z-[100] border-b border-red-500 shadow-sm">
+          <div className="flex animate-marquee-fast hover:pause items-center gap-12">
+            {[...activities.filter(a => a.title === 'New Admission!'), ...activities.filter(a => a.title === 'New Admission!')].map((a, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Sparkles className="w-4 h-4 text-yellow-300" />
+                <span className="text-[11px] font-black uppercase tracking-[0.1em]">
+                  New Admission: {a.description.split('welcome ')[1]?.split(' to')[0]} confirmed in {a.class}!
+                </span>
+                <div className="w-1.5 h-1.5 bg-white/30 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Share Button */}
+      <motion.button
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={handleShare}
+        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-white p-4 rounded-full shadow-2xl border border-stone-800 flex items-center justify-center group"
+      >
+        <Share2 className="w-6 h-6 group-hover:text-red-500 transition-colors" />
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs group-hover:ml-2 transition-all duration-500 font-bold text-sm">
+          Share App
+        </span>
+      </motion.button>
+
+      {/* Share Modal for non-supporting browsers */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setShowShareModal(false)}
+            className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative bg-white p-10 rounded-[40px] shadow-2xl max-w-sm w-full text-center"
+          >
+            <button 
+              onClick={() => setShowShareModal(false)}
+              className="absolute top-6 right-6 p-2 bg-stone-100 rounded-full hover:bg-stone-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <Share2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-2xl font-black mb-2">Share With Friends</h3>
+            <p className="text-stone-500 text-sm mb-8">Spread the word about E.V.S. Public School</p>
+            
+            <div className="space-y-3">
+              <a 
+                href={`https://wa.me/?text=${encodeURIComponent(`Check out E.V.S. Public School - Admission Open 2026-27! ${window.location.origin}`)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full flex items-center justify-center gap-3 bg-[#25D366] text-white py-4 rounded-2xl font-bold hover:opacity-90 transition-all"
+              >
+                <MessageCircle className="w-5 h-5" />
+                WhatsApp
+              </a>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.origin);
+                  toast.success('Link copied!');
+                  setShowShareModal(false);
+                }}
+                className="w-full flex items-center justify-center gap-3 bg-stone-900 text-white py-4 rounded-2xl font-bold hover:bg-stone-800 transition-all"
+              >
+                <Copy className="w-5 h-5" />
+                Copy Link
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <section className="relative h-[80vh] flex items-center justify-center overflow-hidden bg-stone-900">
         <div className="absolute inset-0 opacity-40">
@@ -226,7 +332,7 @@ export default function Home() {
                     <input
                       required
                       type="text"
-                      value={inquiryForm.studentName}
+                      value={inquiryForm.studentName ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, studentName: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
                       placeholder="Full Name"
@@ -236,7 +342,7 @@ export default function Home() {
                     <label className="text-sm font-bold text-stone-700">Date of Birth</label>
                     <input
                       type="date"
-                      value={inquiryForm.dob}
+                      value={inquiryForm.dob ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, dob: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
                     />
@@ -245,7 +351,7 @@ export default function Home() {
                     <label className="text-sm font-bold text-stone-700">Current Class</label>
                     <input
                       type="text"
-                      value={inquiryForm.currentClass}
+                      value={inquiryForm.currentClass ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, currentClass: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
                       placeholder="e.g. Nursery"
@@ -254,7 +360,7 @@ export default function Home() {
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-stone-700">Applying For</label>
                     <select
-                      value={inquiryForm.applyingFor}
+                      value={inquiryForm.applyingFor ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, applyingFor: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
                     >
@@ -271,7 +377,7 @@ export default function Home() {
                     <label className="text-sm font-bold text-stone-700">Father's Name</label>
                     <input
                       type="text"
-                      value={inquiryForm.fatherName}
+                      value={inquiryForm.fatherName ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, fatherName: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
                     />
@@ -281,7 +387,7 @@ export default function Home() {
                     <input
                       required
                       type="tel"
-                      value={inquiryForm.mobile1}
+                      value={inquiryForm.mobile1 ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, mobile1: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
                     />
@@ -557,7 +663,7 @@ export default function Home() {
                     <input
                       required
                       type="text"
-                      value={contactForm.parentName}
+                      value={contactForm.parentName ?? ''}
                       onChange={e => setContactForm({...contactForm, parentName: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-stone-300"
                       placeholder="Enter name"
@@ -568,7 +674,7 @@ export default function Home() {
                     <input
                       required
                       type="tel"
-                      value={contactForm.mobile}
+                      value={contactForm.mobile ?? ''}
                       onChange={e => setContactForm({...contactForm, mobile: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-stone-300"
                       placeholder="Enter mobile"
@@ -579,7 +685,7 @@ export default function Home() {
                   <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Message</label>
                   <textarea
                     required
-                    value={contactForm.message}
+                    value={contactForm.message ?? ''}
                     onChange={e => setContactForm({...contactForm, message: e.target.value})}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all h-32 resize-none placeholder:text-stone-300"
                     placeholder="Write your message here..."
@@ -623,6 +729,31 @@ export default function Home() {
               </a>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Community Section / Share Prompt */}
+      <section className="py-24 bg-red-600 overflow-hidden relative">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,#fff_1px,transparent_1px)] [background-size:40px_40px]" />
+        </div>
+        <div className="max-w-7xl mx-auto px-4 relative z-10 text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+          >
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-6 tracking-tight">Help us grow our school community</h2>
+            <p className="text-red-100 text-xl mb-10 max-w-2xl mx-auto font-medium">
+              Share this portal with your friends and family to help them discover quality education with values.
+            </p>
+            <button 
+              onClick={handleShare}
+              className="bg-white text-red-600 px-12 py-5 rounded-full font-black text-lg hover:bg-stone-100 transition-all shadow-2xl active:scale-95 flex items-center gap-3 mx-auto"
+            >
+              <Share2 className="w-6 h-6" />
+              Share App Link
+            </button>
+          </motion.div>
         </div>
       </section>
 
