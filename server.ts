@@ -10,11 +10,6 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Health check for platform
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", mode: process.env.NODE_ENV || 'development' });
-  });
-
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

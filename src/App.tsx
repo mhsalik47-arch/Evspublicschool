@@ -30,40 +30,35 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      try {
-        if (user) {
-          setUser(user);
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUserData(data);
-            setRole(data.role);
-          } else {
-            // Default role for new staff (first user is admin based on email in user's prompt)
-            const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
-            const newRole = isDefaultAdmin ? 'admin' : 'staff';
-            const initialData = {
-              uid: user.uid,
-              email: user.email || '',
-              phoneNumber: user.phoneNumber || '',
-              displayName: user.displayName || user.phoneNumber || 'Staff Member',
-              role: newRole,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(doc(db, 'users', user.uid), initialData);
-            setUserData(initialData);
-            setRole(newRole);
-          }
+      if (user) {
+        setUser(user);
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          setUserData(data);
+          setRole(data.role);
         } else {
-          setUser(null);
-          setUserData(null);
-          setRole(null);
+          // Default role for new staff (first user is admin based on email in rules)
+          const isDefaultAdmin = user.email === 'mhsalik47@gmail.com';
+          const newRole = isDefaultAdmin ? 'admin' : 'staff';
+          const initialData = {
+            uid: user.uid,
+            email: user.email || '',
+            phoneNumber: user.phoneNumber || '',
+            displayName: user.displayName || user.phoneNumber || 'Staff Member',
+            role: newRole,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'users', user.uid), initialData);
+          setUserData(initialData);
+          setRole(newRole);
         }
-      } catch (error) {
-        console.error('Initial Auth Error:', error);
-      } finally {
-        setLoading(false);
+      } else {
+        setUser(null);
+        setUserData(null);
+        setRole(null);
       }
+      setLoading(false);
     });
 
     return () => unsubscribe();
