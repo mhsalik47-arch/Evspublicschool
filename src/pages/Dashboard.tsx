@@ -46,10 +46,22 @@ import {
   Download,
   ExternalLink,
   Pencil,
-  Smartphone
+  Smartphone,
+  CreditCard,
+  History,
+  X,
+  Info,
+  History as HistoryIcon,
+  BookOpen
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { QRCodeCanvas } from 'qrcode.react';
+
+interface Note {
+  content: string;
+  timestamp: any;
+  authorName: string;
+}
 
 interface Student {
   id: string;
@@ -66,7 +78,25 @@ interface Student {
   registrationDate: any;
   status: string;
   confirmationSent?: boolean;
+  confirmationMethod?: string;
+  confirmationSentAt?: any;
+  confirmationSentBy?: string;
+  notes?: Note[];
+  registrationNumber?: string;
 }
+
+const getClassCode = (className: string) => {
+  const codes: {[key: string]: string} = {
+    'Pre-Nursery': 'PN',
+    'Nursery': 'N',
+    'Junior KG': 'JKG',
+    'Senior KG': 'SKG'
+  };
+  if (className.startsWith('Class ')) {
+    return 'C' + className.split(' ')[1];
+  }
+  return codes[className] || 'GEN';
+};
 
 export default function Dashboard() {
   const { user, role, userData } = useAuth();
@@ -85,6 +115,12 @@ export default function Dashboard() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isEditFeeModalOpen, setIsEditFeeModalOpen] = useState(false);
   const [editingFee, setEditingFee] = useState<any>(null);
+  const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<any>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [isStudentProfileOpen, setIsStudentProfileOpen] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const selectedStudent = students.find(s => s.id === selectedStudentId);
   const [useWABusiness, setUseWABusiness] = useState(() => {
     return localStorage.getItem('use_wa_business') === 'true';
   });
@@ -251,13 +287,14 @@ export default function Dashboard() {
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     
     const appUrl = window.location.origin;
+    const student = students.find(s => s.id === studentId);
     
     let message = '';
     if (role === 'admin') {
-      message = `*E.V.S. PUBLIC SCHOOL Admission Confirmation*\n\nDear Parent,\n\nWe are happy to inform you that your child *${studentName}* has been successfully registered in *${studentClass}* at E.V.S. Public School.\n\n*View App:* ${appUrl}\n\nThank you for choosing us for your child's holistic development.\n\nFor any queries, contact our official number: 8954555074\n\n_Regards,_\n*M. D. Dr. Mh Salik*`;
+      message = `*E.V.S. PUBLIC SCHOOL Admission Confirmation*\n\nDear Parent,\n\nWe are happy to inform you that your child *${studentName}* has been successfully registered in *${studentClass}* at E.V.S. Public School.\n\n*Reg No:* ${student?.registrationNumber || 'Pending'}\n\n*View App:* ${appUrl}`;
     } else {
       const senderName = userData?.fullName || user?.displayName || 'Staff Member';
-      message = `*E.V.S. PUBLIC SCHOOL Admission Initiative*\n\nDear Parent,\n\nWe are happy to inform you that the registration process for your child *${studentName}* in *${studentClass}* has been initiated at E.V.S. Public School.\n\n*App Link:* ${appUrl}\n\nThank you for choosing us.\n\n_BY:_ *${senderName}*`;
+      message = `*E.V.S. PUBLIC SCHOOL Admission Initiative*\n\nDear Parent,\n\nWe are happy to inform you that the registration process for your child *${studentName}* in *${studentClass}* has been initiated.\n\n*View App:* ${appUrl}`;
     }
     
     const encodedMessage = encodeURIComponent(message);
@@ -289,10 +326,11 @@ export default function Dashboard() {
     const cleanPhone = parentPhone.replace(/\D/g, '');
     
     const appUrl = window.location.origin;
+    const student = students.find(s => s.id === studentId);
     
     let message = '';
     if (role === 'admin') {
-      message = `E.V.S. PUBLIC SCHOOL: Admission confirmed for ${studentName} in ${studentClass}. View details: ${appUrl} Regards, M. D. Dr. Mh Salik`;
+      message = `E.V.S. PUBLIC SCHOOL: Admission confirmed for ${studentName} (${studentClass}). Reg No: ${student?.registrationNumber || 'N/A'}. View: ${appUrl} Regards, M. D. Dr. Mh Salik`;
     } else {
       const senderName = userData?.fullName || user?.displayName || 'Staff Member';
       message = `E.V.S. PUBLIC SCHOOL: Registration for ${studentName} (${studentClass}) initiated. App: ${appUrl} BY: ${senderName}`;
@@ -303,13 +341,38 @@ export default function Dashboard() {
     window.location.href = smsUrl;
   };
 
+  const sendInquiryPromoWhatsApp = (inquiry: any) => {
+    const formattedPhone = (inquiry.mobile1 || '').replace(/\D/g, '').length === 10 ? `91${(inquiry.mobile1 || '').replace(/\D/g, '')}` : (inquiry.mobile1 || '').replace(/\D/g, '');
+    const appUrl = window.location.origin;
+    
+    const message = `🌟 *E.V.S. PUBLIC SCHOOL - Admission 2026-27* 🌟\n\n*अस्सलामु अलैकुम!* हमें खुशी है कि आपने अपने बच्चे *${inquiry.studentName}* के उज्जवल भविष्य के लिए हमसे संपर्क किया।\n\n✨ *हमारे स्कूल की विशेषताएं:* ✨\n📚 बेहतरीन आधुनिक शिक्षा (English Medium)\n🕌 दीन और दुनिया का संगम (दीनियात क्लासेस)\n🛡️ सुरक्षित माहौल (CCTV एवं समर्पित स्टाफ)\n🎨 बच्चों की सर्वांगीण उन्नति के लिए गेम्स एवं एक्टिविटीज\n\nअपने बच्चे की सफलता का सफर हमारे साथ शुरू करें।\n\n✅ *अभी रजिस्ट्रेशन कराएं:* https://evspublicschool.vercel.app/\n\n📍 *E.V.S. Public School*\nNear Petrol Pump, Saharanpur Road, Chilkana\n📞 संपर्क करें: +91-8954555074`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    
+    if (useWABusiness) {
+      const intentUrl = `intent://send/${formattedPhone}/?text=${encodedMessage}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
+      window.location.href = intentUrl;
+    } else {
+      window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
     try {
+      // Generate Registration Number
+      const year = new Date().getFullYear();
+      const stQuery = query(collection(db, 'students'), where('class', '==', studentForm.class));
+      const snapshot = await getDocs(stQuery);
+      const classCode = getClassCode(studentForm.class);
+      const sequence = (snapshot.size + 1).toString().padStart(3, '0');
+      const registrationNumber = `EVS/${classCode}/${year}/${sequence}`;
+
       const docRef = await addDoc(collection(db, 'students'), {
         ...studentForm,
+        registrationNumber,
         registeredBy: user.uid,
         registeredByName: userData?.fullName || user.displayName || user.email || user.phoneNumber || 'Staff Member',
         registeredByDesignation: userData?.designation || '',
@@ -451,6 +514,54 @@ export default function Dashboard() {
       toast.success(`Inquiry status updated to ${newStatus}`);
     } catch (error: any) {
       toast.error('Failed to update status');
+    }
+  };
+
+  const handleAddNote = async (studentId: string) => {
+    if (!newNote.trim()) return;
+    setLoading(true);
+    try {
+      const student = students.find(s => s.id === studentId);
+      if (!student) return;
+      
+      const note: Note = {
+        content: newNote,
+        timestamp: Timestamp.now(),
+        authorName: userData?.fullName || user?.displayName || user?.phoneNumber || 'Admin'
+      };
+      
+      const updatedNotes = [...(student.notes || []), note];
+      await updateDoc(doc(db, 'students', studentId), {
+        notes: updatedNotes
+      });
+      
+      setNewNote('');
+      toast.success('Note added successfully');
+      // Update local state if needed (snapshot will handle it though)
+    } catch (error: any) {
+      toast.error('Failed to add note: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    setLoading(true);
+    try {
+      const studentId = editingStudent.id;
+      const { id, registrationNumber, registrationDate, registeredBy, registeredByName, registeredByDesignation, status, ...updateData } = editingStudent;
+      
+      await updateDoc(doc(db, 'students', studentId), updateData);
+      
+      setIsEditStudentModalOpen(false);
+      setEditingStudent(null);
+      toast.success('Student details updated successfully');
+    } catch (error: any) {
+      toast.error('Failed to update student: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -965,19 +1076,34 @@ export default function Dashboard() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-stone-50/50 text-stone-400 text-[10px] uppercase tracking-[0.2em] font-black">
+                        <th className="px-8 py-5">Reg Info</th>
                         <th className="px-8 py-5">Student / Details</th>
                         <th className="px-8 py-5">Family Details</th>
                         <th className="px-8 py-5">Contact</th>
                         <th className="px-8 py-5">Class</th>
                         <th className="px-8 py-5">Joined</th>
+                        <th className="px-8 py-5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-50">
                       {filteredData().map((student: any) => (
                         <tr key={student.id} className="hover:bg-stone-50/30 transition-colors group">
                           <td className="px-8 py-6">
+                            <div className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-1 rounded-lg border border-red-100 inline-block">
+                              {student.registrationNumber || 'N/A'}
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
                             <div className="flex items-center gap-2">
-                              <div className="font-bold text-stone-900 group-hover:text-red-600 transition-colors">{student.fullName}</div>
+                              <button 
+                                onClick={() => {
+                                  setSelectedStudentId(student.id);
+                                  setIsStudentProfileOpen(true);
+                                }}
+                                className="font-bold text-stone-900 group-hover:text-red-600 transition-colors hover:underline text-left"
+                              >
+                                {student.fullName}
+                              </button>
                               {student.confirmationSent && (
                                 <div className="flex items-center gap-1">
                                   <div className={`${student.confirmationMethod === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-stone-900 text-white'} p-0.5 rounded-full`} title={`Confirmed via ${student.confirmationMethod?.toUpperCase()} by ${student.confirmationSentBy}`}>
@@ -1039,6 +1165,18 @@ export default function Dashboard() {
                             <div>{formatDate(student.registrationDate?.toDate())}</div>
                             <div className="text-stone-300 mt-1">BY: {student.registeredByName}</div>
                           </td>
+                          <td className="px-8 py-6 text-right">
+                            <button 
+                              onClick={() => {
+                                setEditingStudent(student);
+                                setIsEditStudentModalOpen(true);
+                              }}
+                              className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-all"
+                              title="Edit Student"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1053,7 +1191,7 @@ export default function Dashboard() {
                         <th className="px-8 py-5">Admission For</th>
                         <th className="px-8 py-5">Status</th>
                         <th className="px-8 py-5">Assigned To</th>
-                        <th className="px-8 py-5">Fee</th>
+                        <th className="px-8 py-5">Fee / Marketing</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-50">
@@ -1062,6 +1200,7 @@ export default function Dashboard() {
                           <td className="px-8 py-6">
                             <div className="font-bold text-stone-900">{inquiry.studentName}</div>
                             <div className="text-[10px] text-stone-400 font-bold">F: {inquiry.fatherName} • {inquiry.mobile1}</div>
+                            <div className="text-[10px] text-red-600 font-black uppercase tracking-tight">VILLAGE: {inquiry.village || 'N/A'}</div>
                             <div className="text-[10px] text-stone-400">DOB: {inquiry.dob} • ADR: {inquiry.aadharNumber || 'N/A'}</div>
                           </td>
                           <td className="px-8 py-6">
@@ -1118,7 +1257,19 @@ export default function Dashboard() {
                               </div>
                             )}
                           </td>
-                          <td className="px-8 py-6 font-black text-red-600">₹{inquiry.amountPaid}</td>
+                          <td className="px-8 py-6">
+                            <div className="flex items-center gap-4">
+                              <span className="font-black text-red-600">₹{inquiry.amountPaid}</span>
+                              <button
+                                onClick={() => sendInquiryPromoWhatsApp(inquiry)}
+                                className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm active:scale-95 group flex items-center gap-2"
+                                title="Send Invite Card"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase hidden group-hover:block">Invite</span>
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1534,6 +1685,335 @@ export default function Dashboard() {
                           </button>
                         </div>
                       </form>
+                    </div>
+                  </div>
+                )}
+
+                {/* Student Profile Modal */}
+                {isStudentProfileOpen && selectedStudent && (
+                  <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                    <div 
+                      className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm"
+                      onClick={() => setIsStudentProfileOpen(false)}
+                    />
+                    <div className="relative bg-white w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[40px] shadow-2xl flex flex-col animate-in fade-in zoom-in duration-300">
+                      {/* Modal Header */}
+                      <div className="bg-stone-900 p-8 text-white">
+                        <button 
+                          onClick={() => setIsStudentProfileOpen(false)}
+                          className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                        >
+                          <X className="w-5 h-5 text-white" />
+                        </button>
+                        <div className="flex items-center gap-6">
+                          <div className="w-20 h-20 bg-white/10 rounded-3xl flex items-center justify-center border border-white/20">
+                            <Users className="w-10 h-10" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h2 className="text-3xl font-black tracking-tight">{selectedStudent.fullName}</h2>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="px-3 py-1 bg-red-600 text-[10px] font-black uppercase tracking-widest rounded-full">
+                                    {selectedStudent.class}
+                                  </span>
+                                  <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest">
+                                    ID: {selectedStudent.id.slice(-8).toUpperCase()}
+                                  </span>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  setIsStudentProfileOpen(false);
+                                  setEditingStudent(selectedStudent);
+                                  setIsEditStudentModalOpen(true);
+                                }}
+                                className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-2xl flex items-center gap-2 transition-all group"
+                              >
+                                <Pencil className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                                <span className="text-xs font-black uppercase tracking-widest">Edit Profile</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Modal Content - Scrollable */}
+                      <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                          {/* Column 1: Basic Info */}
+                          <div className="lg:col-span-1 space-y-6">
+                            <section>
+                              <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <Info className="w-3 h-3" /> Basic Details
+                              </h3>
+                              <div className="bg-stone-50 rounded-3xl p-5 space-y-4">
+                                <div>
+                                  <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Registration Number</p>
+                                  <p className="text-sm font-black text-red-600">{selectedStudent.registrationNumber || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Father's Name</p>
+                                  <p className="text-sm font-bold text-stone-900">{selectedStudent.fatherName}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Mother's Name</p>
+                                  <p className="text-sm font-bold text-stone-900">{selectedStudent.motherName || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Aadhar Number</p>
+                                  <p className="text-sm font-bold text-stone-900">{selectedStudent.aadharNumber}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Date of Birth</p>
+                                  <p className="text-sm font-bold text-stone-900">{selectedStudent.dob}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">WhatsApp Number</p>
+                                  <p className="text-sm font-bold text-stone-900">{selectedStudent.parentPhone}</p>
+                                </div>
+                              </div>
+                            </section>
+
+                            <section>
+                              <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <History className="w-3 h-3" /> Registration
+                              </h3>
+                              <div className="bg-stone-50 rounded-3xl p-5">
+                                <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Joined On</p>
+                                <p className="text-sm font-bold text-stone-900 mb-4">{formatDate(selectedStudent.registrationDate?.toDate())}</p>
+                                
+                                <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Registered By</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="w-6 h-6 bg-stone-200 rounded-lg flex items-center justify-center text-[10px] font-bold">
+                                    {selectedStudent.registeredByName?.[0]}
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-bold text-stone-900">{selectedStudent.registeredByName}</p>
+                                    <p className="text-[8px] font-black text-red-600 uppercase tracking-tighter">{selectedStudent.registeredByDesignation || 'Staff'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </section>
+                          </div>
+
+                          {/* Column 2 & 3: History & Notes */}
+                          <div className="lg:col-span-2 space-y-8">
+                            {/* Fee History */}
+                            <section>
+                              <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <CreditCard className="w-3 h-3" /> Fee Payment History
+                              </h3>
+                              <div className="bg-stone-50 rounded-[32px] overflow-hidden border border-stone-100">
+                                <table className="w-full text-left">
+                                  <thead className="bg-stone-100/50">
+                                    <tr className="text-[9px] font-black text-stone-400 uppercase tracking-widest">
+                                      <th className="px-6 py-4">Month/Type</th>
+                                      <th className="px-6 py-4 text-center">Amount</th>
+                                      <th className="px-6 py-4">Method</th>
+                                      <th className="px-6 py-4 text-right">Date</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-stone-100">
+                                    {fees.filter(f => f.studentId === selectedStudent.id).length > 0 ? (
+                                      fees.filter(f => f.studentId === selectedStudent.id)
+                                        .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
+                                        .map(fee => (
+                                          <tr key={fee.id} className="text-xs border-b border-stone-100 last:border-0 hover:bg-white transition-colors">
+                                            <td className="px-6 py-4">
+                                              <span className="font-bold text-stone-900">{fee.type === 'Monthly' ? fee.month : fee.type}</span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                              <span className="font-black text-green-600">₹{fee.amount}</span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${fee.paymentMethod === 'Online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                {fee.paymentMethod}
+                                              </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                              <span className="text-[10px] font-medium text-stone-400">{formatDate(fee.timestamp?.toDate())}</span>
+                                            </td>
+                                          </tr>
+                                        ))
+                                    ) : (
+                                      <tr>
+                                        <td colSpan={4} className="px-6 py-12 text-center text-stone-400 text-xs font-bold uppercase italic">
+                                          No payment records found
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </section>
+
+                            {/* Internal Notes */}
+                            <section>
+                              <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <BookOpen className="w-3 h-3" /> Internal Notes
+                              </h3>
+                              <div className="space-y-4">
+                                <div className="flex gap-2">
+                                  <input 
+                                    type="text"
+                                    value={newNote}
+                                    onChange={e => setNewNote(e.target.value)}
+                                    placeholder="Add a private note about this student..."
+                                    className="flex-1 bg-stone-50 border border-stone-200 rounded-2xl px-5 py-3 text-sm focus:ring-2 focus:ring-stone-900 outline-none transition-all"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddNote(selectedStudent.id)}
+                                  />
+                                  <button 
+                                    onClick={() => handleAddNote(selectedStudent.id)}
+                                    disabled={loading || !newNote.trim()}
+                                    className="bg-stone-900 text-white px-6 rounded-2xl font-bold text-xs hover:bg-stone-800 transition-all disabled:opacity-50"
+                                  >
+                                    Add Note
+                                  </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                  {selectedStudent.notes && selectedStudent.notes.length > 0 ? (
+                                    [...selectedStudent.notes].reverse().map((note, idx) => (
+                                      <div key={idx} className="bg-stone-50 p-5 rounded-3xl border border-stone-100 group hover:border-stone-300 transition-colors">
+                                        <p className="text-sm text-stone-700 leading-relaxed font-medium">{note.content}</p>
+                                        <div className="flex items-center justify-between mt-3">
+                                          <p className="text-[9px] font-black text-red-600 uppercase tracking-widest">
+                                            By: {note.authorName}
+                                          </p>
+                                          <p className="text-[9px] font-bold text-stone-400">
+                                            {formatDate(note.timestamp?.toDate())}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="bg-stone-50/50 border border-dashed border-stone-200 p-8 rounded-3xl text-center">
+                                      <p className="text-stone-400 text-xs font-bold uppercase tracking-widest italic">No private notes created yet</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </section>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit Student Modal */}
+                {isEditStudentModalOpen && editingStudent && (
+                  <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                    <div 
+                      className="absolute inset-0 bg-stone-900/60 backdrop-blur-md"
+                      onClick={() => setIsEditStudentModalOpen(false)}
+                    />
+                    <div className="relative bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                      <div className="p-8">
+                        <div className="flex items-center gap-4 mb-8">
+                          <div className="w-12 h-12 bg-stone-900 rounded-2xl flex items-center justify-center">
+                            <Pencil className="w-6 h-6 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-black text-stone-900 tracking-tighter">Edit Student Details</h3>
+                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mt-0.5">Updating record for {editingStudent.fullName}</p>
+                          </div>
+                        </div>
+
+                        <form onSubmit={handleUpdateStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Full Name</label>
+                            <input 
+                              required 
+                              type="text" 
+                              value={editingStudent.fullName ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, fullName: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Father's Name</label>
+                            <input 
+                              required 
+                              type="text" 
+                              value={editingStudent.fatherName ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, fatherName: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Mother's Name</label>
+                            <input 
+                              type="text" 
+                              value={editingStudent.motherName ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, motherName: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Date of Birth</label>
+                            <input 
+                              required 
+                              type="date" 
+                              value={editingStudent.dob ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, dob: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Aadhar Number</label>
+                            <input 
+                              required 
+                              type="text" 
+                              value={editingStudent.aadharNumber ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, aadharNumber: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">WhatsApp Number</label>
+                            <input 
+                              required 
+                              type="tel" 
+                              value={editingStudent.parentPhone ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, parentPhone: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <label className="text-[8px] font-black text-stone-400 uppercase tracking-widest ml-1">Student Class</label>
+                            <select 
+                              value={editingStudent.class ?? ''} 
+                              onChange={e => setEditingStudent({...editingStudent, class: e.target.value})} 
+                              className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-5 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900"
+                            >
+                              <option>Pre-Nursery</option>
+                              <option>Nursery</option>
+                              <option>Junior KG</option>
+                              <option>Senior KG</option>
+                              {Array.from({length: 8}, (_, i) => <option key={i+1}>Class {i+1}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-2 pt-4 flex flex-col gap-3">
+                            <button
+                              disabled={loading}
+                              type="submit"
+                              className="w-full bg-stone-900 text-white font-black py-4 rounded-2xl hover:bg-stone-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-stone-900/10"
+                            >
+                              {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Save Changes'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditStudentModalOpen(false)}
+                              className="w-full bg-stone-50 text-stone-500 font-bold py-4 rounded-2xl hover:bg-stone-100 transition-all"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      </div>
                     </div>
                   </div>
                 )}

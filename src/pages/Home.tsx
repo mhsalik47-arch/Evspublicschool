@@ -22,7 +22,7 @@ import {
   Copy
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, Timestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { formatDate } from '../lib/utils';
 
@@ -53,6 +53,7 @@ export default function Home() {
   const [showInquiryModal, setShowInquiryModal] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [notices, setNotices] = useState<any[]>([]);
+  const [admissions, setAdmissions] = useState<any[]>([]);
   const [contactForm, setContactForm] = useState({ parentName: '', mobile: '', message: '' });
   const [contactLoading, setContactLoading] = useState(false);
   const [inquiryForm, setInquiryForm] = useState({
@@ -62,6 +63,7 @@ export default function Home() {
     applyingFor: 'Nursery',
     fatherName: '',
     motherName: '',
+    village: '',
     mobile1: '',
     mobile2: '',
     address: '',
@@ -70,9 +72,23 @@ export default function Home() {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'activities'), orderBy('timestamp', 'desc'), limit(3));
+    const q = query(collection(db, 'activities'), orderBy('timestamp', 'desc'), limit(10));
     return onSnapshot(q, (snapshot) => {
       setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, []);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'activities'), 
+      where('title', '==', 'New Admission!'),
+      orderBy('timestamp', 'desc'), 
+      limit(5)
+    );
+    return onSnapshot(q, (snapshot) => {
+      setAdmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error("Admissions error:", error);
     });
   }, []);
 
@@ -115,7 +131,7 @@ export default function Home() {
       setShowInquiryModal(false);
       setInquiryForm({
         studentName: '', dob: '', currentClass: '', applyingFor: 'Nursery',
-        fatherName: '', motherName: '', mobile1: '', mobile2: '',
+        fatherName: '', motherName: '', village: '', mobile1: '', mobile2: '',
         address: '', aadharNumber: '', amountPaid: ''
       });
     } catch (error: any) {
@@ -147,14 +163,14 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       {/* Scrollable Admission Alert */}
-      {activities.filter(a => a.title === 'New Admission!').length > 0 && (
+      {admissions.length > 0 && (
         <div className="bg-red-600 text-white py-2 overflow-hidden whitespace-nowrap z-[100] border-b border-red-500 shadow-sm">
           <div className="flex animate-marquee-fast hover:pause items-center gap-12">
-            {[...activities.filter(a => a.title === 'New Admission!'), ...activities.filter(a => a.title === 'New Admission!')].map((a, i) => (
+            {[...admissions, ...admissions].map((a, i) => (
               <div key={i} className="flex items-center gap-3">
                 <Sparkles className="w-4 h-4 text-yellow-300" />
                 <span className="text-[11px] font-black uppercase tracking-[0.1em]">
-                  New Admission: {a.description.split('welcome ')[1]?.split(' to')[0]} confirmed in {a.class}!
+                  New Admission: {a.description.split('welcome ')[1]?.split(' to')[0] || a.description} confirmed in {a.class}!
                 </span>
                 <div className="w-1.5 h-1.5 bg-white/30 rounded-full" />
               </div>
@@ -380,6 +396,17 @@ export default function Home() {
                       value={inquiryForm.fatherName ?? ''}
                       onChange={e => setInquiryForm({...inquiryForm, fatherName: e.target.value})}
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-stone-700">Village / Area</label>
+                    <input
+                      required
+                      type="text"
+                      value={inquiryForm.village ?? ''}
+                      onChange={e => setInquiryForm({...inquiryForm, village: e.target.value})}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                      placeholder="e.g. Rampur"
                     />
                   </div>
                   <div className="space-y-2">
