@@ -110,6 +110,60 @@
         "status": { "type": "string", "enum": ["unread", "replied"] }
       },
       "required": ["parentName", "mobile", "message"]
+    },
+    "Expense": {
+      "title": "School Expense",
+      "description": "Financial expenditure record",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "addedBy": { "type": "string" },
+        "addedByName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "amount", "category", "date"]
+    },
+    "Attendance": {
+      "title": "Student Attendance",
+      "description": "Daily attendance record for a student",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["present", "absent"] },
+        "class": { "type": "string" },
+        "markedBy": { "type": "string" },
+        "markedByName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "date", "status", "class"]
+    },
+    "ExamScore": {
+      "title": "Exam Score",
+      "description": "Academic performance for a student in an exam",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "examName": { "type": "string" },
+        "marks": { "type": "object" },
+        "updatedBy": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "examName", "marks"]
+    },
+    "GalleryItem": {
+      "title": "Gallery Image",
+      "description": "School event photo",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "caption": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["url"]
     }
   },
   "firestore": {
@@ -140,6 +194,22 @@
     "/messages/{messageId}": {
       "schema": "ContactMessage",
       "description": "Contact form submissions"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Financial expenses"
+    },
+    "/attendance/{attId}": {
+      "schema": "Attendance",
+      "description": "Student attendance records"
+    },
+    "/scores/{scoreId}": {
+      "schema": "ExamScore",
+      "description": "Student exam scores"
+    },
+    "/gallery/{imageId}": {
+      "schema": "GalleryItem",
+      "description": "School photo gallery"
     }
   }
 }

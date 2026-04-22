@@ -56,6 +56,7 @@ export default function Home() {
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [contactForm, setContactForm] = useState({ parentName: '', mobile: '', message: '' });
   const [contactLoading, setContactLoading] = useState(false);
+  const [gallery, setGallery] = useState<any[]>([]);
   const [inquiryForm, setInquiryForm] = useState({
     studentName: '',
     dob: '',
@@ -96,6 +97,13 @@ export default function Home() {
     const q = query(collection(db, 'notices'), orderBy('timestamp', 'desc'), limit(5));
     return onSnapshot(q, (snapshot) => {
       setNotices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'gallery'), orderBy('timestamp', 'desc'), limit(12));
+    return onSnapshot(q, (snapshot) => {
+      setGallery(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
   }, []);
 
@@ -618,6 +626,42 @@ export default function Home() {
                   </div>
                   <h3 className="text-xl font-bold mb-3 text-stone-900">{activity.title}</h3>
                   <p className="text-stone-600 text-sm leading-relaxed line-clamp-3">{activity.description}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Gallery Section */}
+      {gallery.length > 0 && (
+        <section id="gallery" className="py-24 bg-stone-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-5xl font-black text-stone-900 tracking-tighter mb-4">LATEST EVENTS</h2>
+              <p className="text-stone-500 font-bold uppercase tracking-[0.3em] text-xs">Capturing memories at EVS Public School</p>
+              <div className="w-24 h-2 bg-red-600 mx-auto rounded-full mt-6" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {gallery.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="group relative h-80 rounded-[40px] overflow-hidden shadow-xl hover:shadow-2xl transition-all"
+                >
+                  <img 
+                    src={item.url} 
+                    alt={item.caption} 
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-8">
+                    <p className="text-white text-sm font-bold leading-tight">{item.caption}</p>
+                    <div className="w-8 h-1 bg-red-600 rounded-full mt-3" />
+                  </div>
                 </motion.div>
               ))}
             </div>

@@ -13,6 +13,7 @@ import {
   getDoc,
   doc,
   updateDoc,
+  setDoc,
   getDocs,
   deleteDoc
 } from 'firebase/firestore';
@@ -52,10 +53,17 @@ import {
   X,
   Info,
   History as HistoryIcon,
-  BookOpen
+  BookOpen,
+  Landmark,
+  ShieldCheck,
+  Image,
+  TrendingDown,
+  TrendingUp,
+  Wallet
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { QRCodeCanvas } from 'qrcode.react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 interface Note {
   content: string;
@@ -107,7 +115,11 @@ export default function Dashboard() {
   const [notices, setNotices] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [staffMembers, setStaffMembers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'students' | 'inquiries' | 'fees' | 'activities' | 'notices' | 'messages' | 'settings'>(role === 'admin' ? 'students' : 'students');
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [examScores, setExamScores] = useState<any[]>([]);
+  const [galleryItems, setGalleryItems] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'students' | 'inquiries' | 'fees' | 'activities' | 'notices' | 'messages' | 'attendance' | 'expenses' | 'exams' | 'staff' | 'id-cards' | 'gallery' | 'settings'>(role === 'admin' ? 'students' : 'students');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('All Classes');
@@ -139,6 +151,22 @@ export default function Dashboard() {
     dob: '',
     parentPhone: '',
     class: 'Nursery'
+  });
+
+  const [expenseForm, setExpenseForm] = useState({
+    title: '',
+    amount: '',
+    category: 'Stated Salaries',
+    date: new Date().toISOString().split('T')[0]
+  });
+
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [attendanceClass, setAttendanceClass] = useState('Nursery');
+
+  const [examForm, setExamForm] = useState({
+    studentId: '',
+    examName: 'Final Exam 2026',
+    marks: {} as {[key: string]: number}
   });
 
   const [feeForm, setFeeForm] = useState({
@@ -257,6 +285,37 @@ export default function Dashboard() {
       });
     }
 
+    // Fetch Expenses (Admin Only)
+    let unsubExpenses = () => {};
+    if (role === 'admin') {
+      unsubExpenses = onSnapshot(query(collection(db, 'expenses'), orderBy('date', 'desc')), (snapshot) => {
+        setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (error) => {
+        console.error('Expenses Snapshot Error:', error);
+      });
+    }
+
+    // Fetch Attendance
+    const unsubAttendance = onSnapshot(query(collection(db, 'attendance'), orderBy('date', 'desc')), (snapshot) => {
+      setAttendance(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error('Attendance Snapshot Error:', error);
+    });
+
+    // Fetch Exam Scores
+    const unsubScores = onSnapshot(collection(db, 'scores'), (snapshot) => {
+      setExamScores(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error('Scores Snapshot Error:', error);
+    });
+
+    // Fetch Gallery
+    const unsubGallery = onSnapshot(query(collection(db, 'gallery'), orderBy('timestamp', 'desc')), (snapshot) => {
+      setGalleryItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error('Gallery Snapshot Error:', error);
+    });
+
     return () => {
       unsubStudents();
       unsubInquiries();
@@ -265,6 +324,10 @@ export default function Dashboard() {
       unsubNotices();
       unsubMessages();
       unsubStaff();
+      unsubExpenses();
+      unsubAttendance();
+      unsubScores();
+      unsubGallery();
     };
   }, [user, role]);
 
@@ -563,6 +626,69 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await addDoc(collection(db, 'expenses'), {
+        ...expenseForm,
+        amount: Number(expenseForm.amount),
+        timestamp: Timestamp.now(),
+        addedBy: user?.uid,
+        addedByName: userData?.fullName || user?.displayName || 'Admin'
+      });
+      toast.success('Expense recorded successfully');
+      setExpenseForm({ title: '', amount: '', category: 'General', date: new Date().toISOString().split('T')[0] });
+    } catch (error) {
+      toast.error('Failed to record expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveScore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const scoreId = `${examForm.examName}_${examForm.studentId}`;
+      await setDoc(doc(db, 'scores', scoreId), {
+        ...examForm,
+        timestamp: Timestamp.now(),
+        updatedBy: user?.uid
+      });
+      toast.success('Scores saved successfully');
+    } catch (error) {
+      toast.error('Failed to save scores');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAttendance = async (studentId: string, status: 'present' | 'absent') => {
+    try {
+      const attendanceId = `${attendanceDate}_${studentId}`;
+      await setDoc(doc(db, 'attendance', attendanceId), {
+        studentId,
+        date: attendanceDate,
+        status,
+        class: attendanceClass,
+        timestamp: Timestamp.now(),
+        markedBy: user?.uid,
+        markedByName: userData?.fullName || user?.displayName || 'Staff'
+      });
+      toast.success(`Marked as ${status}`);
+    } catch (error) {
+      toast.error('Failed to mark attendance');
+    }
+  };
+
+  const sendAbsentMessage = (student: Student) => {
+    const formattedPhone = student.parentPhone.replace(/\D/g, '').length === 10 ? `91${student.parentPhone.replace(/\D/g, '')}` : student.parentPhone.replace(/\D/g, '');
+    const message = `E.V.S. PUBLIC SCHOOL: अस्सलामु अलैकुम! सूचित किया जाता है कि आपका बच्चा ${student.fullName} आज स्कूल में गैर-हाजिर (Absent) है। कृपया कारण बताएं। - Dr. Mh Salik`;
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
   };
 
   const handleUpdateFee = async (e: React.FormEvent) => {
@@ -865,15 +991,21 @@ export default function Dashboard() {
             <nav className="space-y-1">
               {[
                 { id: 'students', icon: Users, label: 'Students', count: students.length },
+                { id: 'attendance', icon: Calendar, label: 'Daily Attendance', count: 0 },
+                { id: 'exams', icon: FileText, label: 'Exams & Reports', count: 0 },
+                { id: 'fees', icon: IndianRupee, label: 'Fee Collection', count: fees.length },
+                { id: 'expenses', icon: Landmark, label: 'Expenses (खर्चे)', count: expenses.length },
                 { id: 'activities', icon: ActivityIcon, label: 'Activity Feed', count: activities.length },
                 { id: 'notices', icon: Bell, label: 'Notice Board', count: notices.length },
-                { id: 'fees', icon: IndianRupee, label: 'Accounts', count: fees.length },
                 ...(role === 'admin' ? [
-                  { id: 'inquiries', icon: ClipboardList, label: 'Admissions', count: inquiries.length },
+                  { id: 'inquiries', icon: ClipboardList, label: 'Inquiries', count: inquiries.length },
                   { id: 'messages', icon: Inbox, label: 'Visitor Inbox', count: messages.length },
+                  { id: 'staff', icon: ShieldCheck, label: 'Staff Management', count: staffMembers.length },
+                  { id: 'id-cards', icon: CreditCard, label: 'ID Card Studio', count: 0 },
+                  { id: 'gallery', icon: Image, label: 'Public Gallery', count: galleryItems.length },
                   { id: 'settings', icon: Cog, label: 'System Settings', count: 0 }
                 ] : [
-                  { id: 'inquiries', icon: ClipboardList, label: 'Assigned Leads', count: inquiries.length }
+                  { id: 'inquiries', icon: ClipboardList, label: 'My Leads', count: inquiries.length }
                 ])
               ].map(tab => (
                 <button 
@@ -940,6 +1072,38 @@ export default function Dashboard() {
         {/* Main Content Area */}
         <div className="lg:col-span-9 space-y-6">
           
+          {/* Birthday Section */}
+          {students.some(s => s.dob && s.dob.includes(`${new Date().getMonth() + 1}-${new Date().getDate()}`)) && (
+            <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-[40px] p-8 text-white shadow-2xl shadow-red-600/20 flex items-center justify-between overflow-hidden relative group">
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center animate-bounce">
+                    <span className="text-xl">🎂</span>
+                  </div>
+                  <h3 className="text-2xl font-black tracking-tight uppercase">Today's Birthdays!</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {students.filter(s => s.dob && s.dob.includes(`${new Date().getMonth() + 1}-${new Date().getDate()}`)).map(s => (
+                    <button 
+                      key={s.id}
+                      onClick={() => {
+                        const formattedPhone = s.parentPhone.replace(/\D/g, '').length === 10 ? `91${s.parentPhone.replace(/\D/g, '')}` : s.parentPhone.replace(/\D/g, '');
+                        const message = `🌟 E.V.S. PUBLIC SCHOOL 🌟\nअस्सलामु अलैकुम! EVS परिवार की ओर से आपके बच्चे *${s.fullName}* को जन्मदिन की बहुत-बहुत मुबारकबाद! हम दुआ करते हैं कि अल्लाह उसे नेक बनाए और कामयाबी अता करे। - Dr. Mh Salik`;
+                        window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`, '_blank');
+                      }}
+                      className="px-4 py-2 bg-white/10 hover:bg-white text-white hover:text-red-700 rounded-xl font-bold text-sm transition-all flex items-center gap-2 group/btn"
+                    >
+                      {s.fullName} <MessageCircle className="w-4 h-4 opacity-0 group-hover/btn:opacity-100" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="hidden md:block opacity-20 pointer-events-none translate-x-10 translate-y-10">
+                <Users className="w-64 h-64 text-white" />
+              </div>
+            </div>
+          )}
+
           {/* Action & Filter Header */}
           <div className="bg-white rounded-3xl p-4 shadow-xl shadow-stone-200/50 border border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4 flex-1">
@@ -1406,6 +1570,444 @@ export default function Dashboard() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {activeTab === 'attendance' && (
+                  <div className="p-8 space-y-6">
+                    <div className="flex flex-col sm:flex-row gap-4 bg-stone-50 p-6 rounded-[32px] border border-stone-100">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 ml-4">Date</label>
+                        <input
+                          type="date"
+                          value={attendanceDate}
+                          onChange={e => setAttendanceDate(e.target.value)}
+                          className="w-full bg-white border border-stone-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900 transition-all"
+                        />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 ml-4">Class</label>
+                        <select
+                          value={attendanceClass}
+                          onChange={e => setAttendanceClass(e.target.value)}
+                          className="w-full bg-white border border-stone-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900 transition-all appearance-none"
+                        >
+                          {['Pre-Nursery', 'Nursery', 'Junior KG', 'Senior KG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5'].map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {students.filter(s => s.class === attendanceClass).map(student => {
+                        const statusRecord = attendance.find(a => a.studentId === student.id && a.date === attendanceDate);
+                        return (
+                          <div key={student.id} className="bg-white border border-stone-100 p-6 rounded-[32px] flex items-center justify-between group hover:shadow-xl transition-all">
+                            <div>
+                              <h4 className="font-bold text-stone-900">{student.fullName}</h4>
+                              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-tight">F: {student.fatherName}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              {statusRecord?.status === 'absent' && (
+                                <button
+                                  onClick={() => sendAbsentMessage(student)}
+                                  className="w-10 h-10 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center hover:bg-green-600 hover:text-white transition-all shadow-sm"
+                                  title="Send WhatsApp Absent Alert"
+                                >
+                                  <MessageCircle className="w-5 h-5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleMarkAttendance(student.id, statusRecord?.status === 'present' ? 'absent' : 'present')}
+                                className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                  statusRecord?.status === 'present' 
+                                  ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' 
+                                  : statusRecord?.status === 'absent'
+                                  ? 'bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700'
+                                  : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                                }`}
+                              >
+                                {statusRecord?.status || 'Mark'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'expenses' && role === 'admin' && (
+                  <div className="p-8 space-y-8">
+                    {/* Financial Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="bg-white border border-stone-100 p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
+                        <IndianRupee className="absolute -right-4 -bottom-4 w-24 h-24 text-green-100 group-hover:scale-110 transition-transform" />
+                        <div className="relative z-10">
+                          <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Total Fees Collected</p>
+                          <h3 className="text-3xl font-black text-stone-900 tracking-tight">₹{fees.reduce((acc, curr) => acc + (curr.amount || 0), 0).toLocaleString()}</h3>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-stone-400 mt-2">
+                             <TrendingUp className="w-3 h-3 text-green-500" />
+                             <span>Revenue Stream</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white border border-stone-100 p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
+                        <TrendingDown className="absolute -right-4 -bottom-4 w-24 h-24 text-red-100 group-hover:scale-110 transition-transform" />
+                        <div className="relative z-10">
+                          <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Total Expenses</p>
+                          <h3 className="text-3xl font-black text-stone-900 tracking-tight">₹{expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0).toLocaleString()}</h3>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-stone-400 mt-2">
+                             <TrendingDown className="w-3 h-3 text-red-500" />
+                             <span>Operational Costs</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-stone-900 p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
+                        <Wallet className="absolute -right-4 -bottom-4 w-24 h-24 text-white/5 group-hover:scale-110 transition-transform" />
+                        <div className="relative z-10">
+                          <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Net Monthly Profit</p>
+                          <h3 className="text-3xl font-black text-white tracking-tight">
+                            ₹{(fees.reduce((acc, curr) => acc + (curr.amount || 0), 0) - expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)).toLocaleString()}
+                          </h3>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-stone-500 mt-2">
+                             <CheckCircle2 className="w-3 h-3 text-red-600" />
+                             <span>Wallet Balance Insight</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Expense Category Chart */}
+                      <div className="bg-white border border-stone-100 p-10 rounded-[40px] shadow-xl">
+                        <h4 className="text-sm font-black text-stone-900 uppercase tracking-widest mb-8 flex items-center gap-2">
+                          <ActivityIcon className="w-4 h-4 text-red-500" />
+                          Category Distribution
+                        </h4>
+                        <div className="h-[300px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(expenses.reduce((acc, curr) => {
+                                  acc[curr.category] = (acc[curr.category] || 0) + (curr.amount || 0);
+                                  return acc;
+                                }, {} as any)).map(([name, value]) => ({ name, value }))}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                              >
+                                {['#ef4444', '#1c1917', '#78716c', '#f87171', '#44403c', '#d6d3d1'].map((color, index) => (
+                                  <Cell key={`cell-${index}`} fill={color} />
+                                ))}
+                              </Pie>
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
+                                itemStyle={{ fontWeight: 'bold' }}
+                                />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Add Expense Form (Moved here for better layout) */}
+                      <div className="bg-stone-50 border border-stone-100 p-10 rounded-[40px]">
+                        <h4 className="text-sm font-black text-stone-900 uppercase tracking-widest mb-6 italic">Record New Transaction</h4>
+                        <form onSubmit={handleAddExpense} className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 ml-4">Title / Item</label>
+                            <input
+                              required
+                              type="text"
+                              value={expenseForm.title}
+                              onChange={e => setExpenseForm({...expenseForm, title: e.target.value})}
+                              className="w-full bg-white border border-stone-200 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 transition-all"
+                              placeholder="e.g. Stationery Purchase"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 ml-4">Amount (₹)</label>
+                              <input
+                                required
+                                type="number"
+                                value={expenseForm.amount}
+                                onChange={e => setExpenseForm({...expenseForm, amount: e.target.value})}
+                                className="w-full bg-white border border-stone-200 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 transition-all"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 ml-4">Category</label>
+                              <select
+                                value={expenseForm.category}
+                                onChange={e => setExpenseForm({...expenseForm, category: e.target.value})}
+                                className="w-full bg-white border border-stone-200 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 transition-all appearance-none"
+                              >
+                                <option value="Staff Salary">Staff Salary</option>
+                                <option value="Electricity">Electricity</option>
+                                <option value="Stationery">Stationery</option>
+                                <option value="General">General</option>
+                              </select>
+                            </div>
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-stone-900 text-white font-black py-4 rounded-2xl hover:bg-stone-800 transition-all shadow-xl shadow-stone-900/20 active:scale-[0.98] mt-2"
+                          >
+                            Add Expense Record
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-stone-100 rounded-[40px] overflow-hidden shadow-xl">
+                      <table className="w-full text-left font-sans">
+                        <thead className="bg-stone-50/50 text-stone-400 text-[10px] uppercase tracking-[0.2em] font-black">
+                          <tr>
+                            <th className="px-8 py-5">Date</th>
+                            <th className="px-8 py-5">Title</th>
+                            <th className="px-8 py-5">Category</th>
+                            <th className="px-8 py-5">Amount</th>
+                            <th className="px-8 py-5">By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                          {expenses.map(expense => (
+                            <tr key={expense.id} className="hover:bg-stone-50/30 transition-colors">
+                              <td className="px-8 py-6 text-xs text-stone-500 font-bold uppercase">{expense.date}</td>
+                              <td className="px-8 py-6 font-bold text-stone-900">{expense.title}</td>
+                              <td className="px-8 py-6">
+                                <span className="text-[9px] font-bold bg-stone-100 text-stone-600 px-2.5 py-1 rounded-lg uppercase tracking-tight">{expense.category}</span>
+                              </td>
+                              <td className="px-8 py-6 font-black text-red-600">₹{expense.amount}</td>
+                              <td className="px-8 py-6 text-[10px] font-bold text-stone-400">{expense.addedByName}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'exams' && (
+                  <div className="p-8 space-y-6">
+                    <div className="flex flex-col sm:flex-row gap-4 bg-red-50 p-6 rounded-[32px] border border-red-100">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-red-600 ml-4">Select Student</label>
+                        <select
+                          value={examForm.studentId}
+                          onChange={e => setExamForm({...examForm, studentId: e.target.value})}
+                          className="w-full bg-white border border-red-200 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 transition-all appearance-none"
+                        >
+                          <option value="">Choose Student...</option>
+                          {students.map(s => (
+                            <option key={s.id} value={s.id}>{s.fullName} ({s.class})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-red-600 ml-4">Exam Name</label>
+                        <input
+                          type="text"
+                          value={examForm.examName}
+                          onChange={e => setExamForm({...examForm, examName: e.target.value})}
+                          className="w-full bg-white border border-red-200 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {examForm.studentId && (
+                      <form onSubmit={handleSaveScore} className="bg-white border border-stone-100 p-10 rounded-[40px] shadow-xl space-y-8">
+                        <h3 className="text-xl font-black text-stone-900 tracking-tight flex items-center gap-3">
+                          <FileText className="text-red-500" /> Enter Marks for {students.find(s => s.id === examForm.studentId)?.fullName}
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {['Maths', 'English', 'Science', 'Hindi', 'Urdu', 'Diniyat', 'Drawing', 'G.K.'].map(subject => (
+                            <div key={subject} className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 ml-4">{subject}</label>
+                              <input
+                                type="number"
+                                placeholder="/100"
+                                value={examForm.marks[subject] || ''}
+                                onChange={e => setExamForm({
+                                  ...examForm, 
+                                  marks: {...examForm.marks, [subject]: Number(e.target.value)}
+                                })}
+                                className="w-full bg-stone-50 border border-stone-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-stone-900 transition-all"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full bg-stone-900 text-white font-black py-5 rounded-2xl hover:bg-stone-800 transition-all shadow-xl shadow-stone-900/20 active:scale-[0.98] mt-6"
+                        >
+                          Save Digital Report Card
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'gallery' && role === 'admin' && (
+                  <div className="p-8 space-y-8">
+                    <div className="bg-stone-900 p-10 rounded-[40px] text-white">
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 bg-red-100/10 text-red-500 rounded-2xl flex items-center justify-center">
+                          <Image className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-black tracking-tight">Public Gallery Management</h3>
+                          <p className="text-stone-400 text-xs italic">Add photos of school events to the website</p>
+                        </div>
+                      </div>
+                      <form 
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const form = e.target as HTMLFormElement;
+                          const url = (form.elements.namedItem('imageUrl') as HTMLInputElement).value;
+                          const caption = (form.elements.namedItem('caption') as HTMLInputElement).value;
+                          if (!url) return;
+                          setLoading(true);
+                          try {
+                            await addDoc(collection(db, 'gallery'), {
+                              url,
+                              caption,
+                              timestamp: Timestamp.now()
+                            });
+                            form.reset();
+                            toast.success('Photo added to gallery');
+                          } catch (error) {
+                            toast.error('Failed to add photo');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                        className="flex flex-col sm:flex-row gap-4 mt-6"
+                      >
+                        <input name="imageUrl" required placeholder="Image URL (e.g. from Google Photos / CDN)" className="flex-[2] bg-stone-800 border-none rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500" />
+                        <input name="caption" placeholder="Photo Caption" className="flex-1 bg-stone-800 border-none rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500" />
+                        <button type="submit" className="bg-red-600 px-10 py-4 rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/20 active:scale-95">Add Photo</button>
+                      </form>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                      {galleryItems.map(item => (
+                        <div key={item.id} className="group relative bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-2xl transition-all aspect-square">
+                          <img src={item.url} alt={item.caption} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-6 flex flex-col justify-end">
+                            <p className="text-white text-xs font-bold leading-tight mb-2">{item.caption}</p>
+                            <button 
+                              onClick={async () => {
+                                if(confirm('Delete this photo?')) {
+                                  await deleteDoc(doc(db, 'gallery', item.id));
+                                  toast.success('Photo removed');
+                                }
+                              }}
+                              className="w-full py-2 bg-red-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-red-700 transition-all"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'id-cards' && (
+                  <div className="p-8 space-y-10">
+                    <div className="text-center max-w-2xl mx-auto">
+                      <h2 className="text-3xl font-black text-stone-900 tracking-tight mb-2 italic underline decoration-red-500 underline-offset-8 decoration-4">EVS ID Card Studio</h2>
+                      <p className="text-stone-500 text-sm font-medium">Select a student to generate a high-quality printable identity card.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {students.slice(0, 12).map(student => (
+                        <div key={student.id} className="relative group bg-white border border-stone-100 rounded-[40px] p-8 shadow-xl hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col items-center">
+                          <div className="absolute top-0 left-0 w-full h-24 bg-stone-900 group-hover:bg-red-600 transition-colors duration-500" />
+                          <div className="relative z-10 w-24 h-24 bg-white border-4 border-white rounded-3xl overflow-hidden shadow-xl mb-6 mt-4">
+                            <img src={`https://ui-avatars.com/api/?name=${student.fullName}&background=random&size=200`} alt={student.fullName} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="text-center relative z-10 w-full">
+                            <h4 className="text-xl font-black text-stone-900 tracking-tight truncate">{student.fullName}</h4>
+                            <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mt-1">Reg: {student.registrationNumber}</p>
+                            
+                            <div className="mt-6 space-y-2 text-[10px] font-bold text-stone-500 text-left border-t border-stone-50 pt-4">
+                              <p className="flex justify-between"><span>CLASS:</span> <span className="text-stone-900">{student.class}</span></p>
+                              <p className="flex justify-between"><span>PHONE:</span> <span className="text-stone-900">{student.parentPhone}</span></p>
+                              <p className="flex justify-between"><span>BLOOD:</span> <span className="text-stone-900">A+ (Default)</span></p>
+                            </div>
+
+                            <button
+                              onClick={() => toast.info('PDF Generation coming soon - preview mode')}
+                              className="w-full bg-stone-100 text-stone-900 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-stone-900 hover:text-white transition-all mt-6 shadow-sm active:scale-95"
+                            >
+                              Download PDF Card
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'staff' && role === 'admin' && (
+                  <div className="p-8 space-y-6">
+                    <div className="bg-stone-50 border border-stone-100 rounded-[40px] overflow-hidden shadow-xl">
+                      <table className="w-full text-left font-sans">
+                        <thead className="bg-stone-50/50 text-stone-400 text-[10px] uppercase tracking-[0.2em] font-black">
+                          <tr>
+                            <th className="px-8 py-5">Staff Member</th>
+                            <th className="px-8 py-5">Designation</th>
+                            <th className="px-8 py-5">Status</th>
+                            <th className="px-8 py-5 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                          {staffMembers.map(staff => (
+                            <tr key={staff.id} className="hover:bg-stone-50/30 transition-colors">
+                              <td className="px-8 py-6">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-stone-100 rounded-2xl flex items-center justify-center text-stone-900 border border-stone-200">
+                                    <User className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-stone-900">{staff.fullName || 'New Member'}</div>
+                                    <div className="text-[10px] text-stone-400 font-bold">{staff.email}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-8 py-6">
+                                <span className="text-[10px] font-black text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-100 uppercase tracking-tight">
+                                  {staff.designation || 'Trainee'}
+                                </span>
+                              </td>
+                              <td className="px-8 py-6">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                  <span className="text-[10px] font-bold text-stone-500 uppercase">Active</span>
+                                </div>
+                              </td>
+                              <td className="px-8 py-6 text-right">
+                                <button
+                                  onClick={() => toast.info('Staff attendance feature is active in the Attendance tab.')}
+                                  className="p-2 text-stone-400 hover:text-stone-900 transition-colors"
+                                >
+                                  <Calendar className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
